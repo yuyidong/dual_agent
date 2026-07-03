@@ -1,0 +1,29 @@
+[project]
+name = "dual-agent-opf"
+version = "0.1.0"
+description = "Decision-focused dual-agent learning for PV forecasting and stochastic distribution OPF surrogates."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "torch>=2.1",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+opendss = [
+  "opendssdirect.py>=0.9",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

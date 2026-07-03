@@ -1,0 +1,65 @@
+seed: 7
+
+network:
+  dss_master: data/ieee13/IEEE13Nodeckt.dss
+  pv_systems:
+    - pv_634
+    - pv_671
+    - pv_675
+    - pv_680
+  load_buses:
+    - 634
+    - 645
+    - 646
+    - 671
+    - 675
+    - 692
+    - 611
+    - 652
+    - 680
+  battery:
+    name: bat_675
+    bus: "675.1.2.3"
+    phases: 3
+    kv: 4.16
+    kw_rated: 500.0
+    kwh_rated: 1000.0
+    soc_initial: 0.5
+    soc_min: 0.1
+    soc_max: 0.9
+    charge_efficiency: 0.95
+    discharge_efficiency: 0.95
+
+problem:
+  history_steps: 12
+  horizon_steps: 24
+  scenarios: 8
+  interval_hours: 0.25
+  pv_feature_dim: 6
+  load_feature_dim: 2
+
+teacher:
+  candidates: 64
+  elite_fraction: 0.2
+  cem_iterations: 3
+  voltage_lower: 0.95
+  voltage_upper: 1.05
+  energy_price_per_kwh: 0.12
+  degradation_per_kwh: 0.02
+  curtailment_per_kwh: 0.04
+  voltage_violation_weight: 2000.0
+
+model:
+  hidden_dim: 96
+  graph_layers: 2
+  temporal_layers: 2
+  dropout: 0.1
+
+training:
+  batch_size: 32
+  epochs: 20
+  learning_rate: 0.001
+  forecast_loss_weight: 1.0
+  decision_loss_weight: 0.2
+  risk_loss_weight: 0.1
+
