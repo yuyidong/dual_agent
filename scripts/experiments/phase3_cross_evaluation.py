@@ -224,7 +224,9 @@ def plot_cross_matrix(
     forecaster_mmd: list[float] | None = None,
     mmd_reference: str = "initial",
 ) -> None:
-    plt.rcParams["font.family"] = "Noto Sans CJK SC"
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams["font.serif"] = ["Times New Roman", "DejaVu Serif"]
+    plt.rcParams["mathtext.fontset"] = "stix"
     plt.rcParams["axes.unicode_minus"] = False
     size = matrix.shape[0]
     if forecaster_mmd is None:
