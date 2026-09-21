@@ -87,6 +87,8 @@ class TrainingConfig:
     max_grad_norm: float | None
     joint_forecast_loss_tolerance: float
     joint_forecast_constraint_weight: float
+    joint_forecast_loss_weight: float
+    phase3_reset_forecaster_scheduler_per_round: bool
     operating_cost_loss_weight: float
     voltage_violation_loss_weight: float
     line_flow_violation_loss_weight: float
@@ -169,6 +171,8 @@ def load_config(path: str | Path) -> ExperimentConfig:
     training_raw.setdefault("phase3_rounds", training_raw["joint_rounds"])
     training_raw.setdefault("joint_forecast_loss_tolerance", 0.05)
     training_raw.setdefault("joint_forecast_constraint_weight", 1.0)
+    training_raw.setdefault("joint_forecast_loss_weight", 0.0)
+    training_raw.setdefault("phase3_reset_forecaster_scheduler_per_round", False)
     training_raw.setdefault("surrogate_consistency_loss_weight", 0.0)
     training_raw.setdefault("phase3_early_stopping_patience", 0)
     training_raw.setdefault("phase3_early_stopping_min_delta", 0.001)
@@ -201,6 +205,8 @@ def load_config(path: str | Path) -> ExperimentConfig:
     training_raw.pop("decision_loss_weight", None)
     training_raw.pop("risk_loss_weight", None)
     training_raw.pop("soc_loss_weight", None)
+    if float(training_raw["joint_forecast_loss_weight"]) < 0:
+        raise ValueError("training.joint_forecast_loss_weight must be non-negative.")
     if float(training_raw["surrogate_consistency_loss_weight"]) < 0:
         raise ValueError("training.surrogate_consistency_loss_weight must be non-negative.")
     if int(training_raw["phase3_early_stopping_patience"]) < 0:

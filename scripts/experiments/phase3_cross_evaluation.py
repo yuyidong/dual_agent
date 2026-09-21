@@ -280,10 +280,12 @@ def main() -> None:
     )
     forecaster_epochs = split_epochs(forecaster_epochs_total, rounds)
     surrogate_epochs = split_epochs(surrogate_epochs_total, rounds)
-    forecaster_scheduler = make_warmup_cosine_scheduler(
-        forecaster_optimizer, max(1, sum(forecaster_epochs)), len(train_loader),
-        config.training.warmup_epochs, config.training.min_learning_rate_ratio,
-    )
+    forecaster_scheduler = None
+    if not config.training.phase3_reset_forecaster_scheduler_per_round:
+        forecaster_scheduler = make_warmup_cosine_scheduler(
+            forecaster_optimizer, max(1, sum(forecaster_epochs)), len(train_loader),
+            config.training.warmup_epochs, config.training.min_learning_rate_ratio,
+        )
     surrogate_scheduler = make_warmup_cosine_scheduler(
         surrogate_optimizer, max(1, sum(surrogate_epochs)), len(train_loader),
         config.training.warmup_epochs, config.training.min_learning_rate_ratio,
@@ -316,6 +318,16 @@ def main() -> None:
         last_forecaster_metrics = None
         requested_surrogate_epochs = surrogate_epochs[round_index]
         requested_forecaster_epochs = forecaster_epochs[round_index]
+        if config.training.phase3_reset_forecaster_scheduler_per_round and requested_forecaster_epochs:
+            for parameter_group in forecaster_optimizer.param_groups:
+                parameter_group["lr"] = config.training.joint_learning_rate
+            forecaster_scheduler = make_warmup_cosine_scheduler(
+                forecaster_optimizer,
+                requested_forecaster_epochs,
+                len(train_loader),
+                min(config.training.warmup_epochs, requested_forecaster_epochs),
+                config.training.min_learning_rate_ratio,
+            )
         actual_surrogate_epochs = 0
         actual_forecaster_epochs = 0
         surrogate_best_operating_cost = float("inf")
@@ -382,6 +394,7 @@ def main() -> None:
                 system, evaluator, train_loader, forecaster_optimizer,
                 adjacency, device, forecast_loss_cap,
                 config.training.joint_forecast_constraint_weight,
+                config.training.joint_forecast_loss_weight,
                 config.training.operating_cost_loss_weight,
                 config.training.voltage_violation_loss_weight,
                 config.training.line_flow_violation_loss_weight,
@@ -445,12 +458,14 @@ def main() -> None:
             record["forecaster_train_forecast_loss"] = last_forecaster_metrics["forecast_loss"]
             record["forecaster_train_operating_cost"] = last_forecaster_metrics["operating_cost"]
         round_records.append(record)
+        surrogate_best = record.get("surrogate_best_validation_operating_cost")
+        forecaster_best = record.get("forecaster_best_validation_operating_cost")
         print(
             f"stage={round_index + 1} "
             f"surrogate_epochs={actual_surrogate_epochs}/{requested_surrogate_epochs} "
             f"forecaster_epochs={actual_forecaster_epochs}/{requested_forecaster_epochs} "
-            f"surrogate_best={record.get('surrogate_best_validation_operating_cost', float('nan')):.3f} "
-            f"forecaster_best={record.get('forecaster_best_validation_operating_cost', float('nan')):.3f} "
+            f"surrogate_best={(float('nan') if surrogate_best is None else surrogate_best):.3f} "
+            f"forecaster_best={(float('nan') if forecaster_best is None else forecaster_best):.3f} "
             f"early_stop=({surrogate_early_stopped},{forecaster_early_stopped}) "
             f"elapsed={record['elapsed_seconds']:.1f}s"
         )

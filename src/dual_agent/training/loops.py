@@ -351,6 +351,7 @@ def train_joint_epoch(
     device: torch.device,
     forecast_loss_cap: float,
     forecast_constraint_weight: float,
+    forecast_loss_weight: float,
     operating_cost_loss_weight: float,
     voltage_violation_loss_weight: float,
     line_flow_violation_loss_weight: float,
@@ -387,7 +388,11 @@ def train_joint_epoch(
             terminal_soc_loss_weight,
         )
         forecast_constraint_violation = torch.relu(forecast_loss - forecast_loss_cap)
-        loss = lindistflow_loss + forecast_constraint_weight * forecast_constraint_violation
+        loss = (
+            lindistflow_loss
+            + forecast_loss_weight * forecast_loss
+            + forecast_constraint_weight * forecast_constraint_violation
+        )
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         if max_grad_norm is not None:
@@ -422,6 +427,7 @@ def evaluate_joint_loss(
     device: torch.device,
     forecast_loss_cap: float,
     forecast_constraint_weight: float,
+    forecast_loss_weight: float,
     operating_cost_loss_weight: float,
     voltage_violation_loss_weight: float,
     line_flow_violation_loss_weight: float,
@@ -452,7 +458,11 @@ def evaluate_joint_loss(
             terminal_soc_loss_weight,
         )
         forecast_constraint_violation = torch.relu(forecast_loss - forecast_loss_cap)
-        loss = lindistflow_loss + forecast_constraint_weight * forecast_constraint_violation
+        loss = (
+            lindistflow_loss
+            + forecast_loss_weight * forecast_loss
+            + forecast_constraint_weight * forecast_constraint_violation
+        )
         batch_size = batch["pv_history"].size(0)
         samples += batch_size
         _accumulate_joint_metrics(

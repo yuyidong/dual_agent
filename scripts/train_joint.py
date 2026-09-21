@@ -138,13 +138,15 @@ def main() -> None:
         else [0]
     )
     total_surrogate_epochs = _total_joint_surrogate_epochs(config.training)
-    forecaster_scheduler = make_warmup_cosine_scheduler(
-        forecaster_optimizer,
-        max(1, sum(forecaster_epochs_per_round)),
-        len(train_loader),
-        config.training.warmup_epochs,
-        config.training.min_learning_rate_ratio,
-    )
+    forecaster_scheduler = None
+    if not config.training.phase3_reset_forecaster_scheduler_per_round:
+        forecaster_scheduler = make_warmup_cosine_scheduler(
+            forecaster_optimizer,
+            max(1, sum(forecaster_epochs_per_round)),
+            len(train_loader),
+            config.training.warmup_epochs,
+            config.training.min_learning_rate_ratio,
+        )
     surrogate_scheduler = make_warmup_cosine_scheduler(
         surrogate_optimizer,
         total_surrogate_epochs,
@@ -166,6 +168,16 @@ def main() -> None:
             forecaster_bad_epochs = 0
             forecaster_best_state = None
             forecaster_early_stopped = False
+            if config.training.phase3_reset_forecaster_scheduler_per_round and forecaster_epochs:
+                for parameter_group in forecaster_optimizer.param_groups:
+                    parameter_group["lr"] = config.training.joint_learning_rate
+                forecaster_scheduler = make_warmup_cosine_scheduler(
+                    forecaster_optimizer,
+                    forecaster_epochs,
+                    len(train_loader),
+                    min(config.training.warmup_epochs, forecaster_epochs),
+                    config.training.min_learning_rate_ratio,
+                )
             reference_surrogate = None
             if (
                 surrogate_epochs
@@ -276,6 +288,7 @@ def main() -> None:
                     device,
                     forecast_loss_cap,
                     config.training.joint_forecast_constraint_weight,
+                    config.training.joint_forecast_loss_weight,
                     config.training.operating_cost_loss_weight,
                     config.training.voltage_violation_loss_weight,
                     config.training.line_flow_violation_loss_weight,
@@ -294,6 +307,7 @@ def main() -> None:
                     device,
                     forecast_loss_cap,
                     config.training.joint_forecast_constraint_weight,
+                    config.training.joint_forecast_loss_weight,
                     config.training.operating_cost_loss_weight,
                     config.training.voltage_violation_loss_weight,
                     config.training.line_flow_violation_loss_weight,
