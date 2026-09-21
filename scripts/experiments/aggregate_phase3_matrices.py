@@ -5,6 +5,8 @@ import json
 
 import numpy as np
 
+from phase3_cross_evaluation import plot_cross_matrix
+
 
 def write_matrix_csv(path, matrix):
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -31,10 +33,10 @@ def main():
     raw_mean = raw.mean(axis=0)
     raw_std = raw.std(axis=0, ddof=1)
 
-    mmd = np.array([
-        result["forecaster_output_mmd_from_F0"]
-        for result in result_data["results"]
-    ], dtype=float)
+    mmd_key = "forecaster_output_mmd_adjacent"
+    if not all(mmd_key in result for result in result_data["results"]):
+        mmd_key = "forecaster_output_mmd_from_F0"
+    mmd = np.array([result[mmd_key] for result in result_data["results"]], dtype=float)
     metrics = [result["test"] for result in result_data["results"]]
     metric_names = ["operating_cost", "objective", "terminal_soc_deviation"]
     test_summary = {}
@@ -67,6 +69,7 @@ def main():
         "seeds": seeds,
         "normalized_mean": normalized_mean.tolist(),
         "normalized_std": normalized_std.tolist(),
+        "mmd_reference": "adjacent" if mmd_key.endswith("adjacent") else "initial",
         "mmd_mean": mmd.mean(axis=0).tolist(),
         "mmd_std": mmd.std(axis=0, ddof=1).tolist(),
         "test_summary": test_summary,
@@ -86,10 +89,23 @@ def main():
         normalized_operating_cost=normalized_mean,
     )
     plot_summary = {
-        "forecaster_output_mmd_from_F0": mmd.mean(axis=0).tolist(),
+        mmd_key: mmd.mean(axis=0).tolist(),
+        "mmd_reference": "adjacent" if mmd_key.endswith("adjacent") else "initial",
     }
     (root / "phase3_cross_evaluation_summary.json").write_text(
         json.dumps(plot_summary, indent=2), encoding="utf-8"
+    )
+    plot_cross_matrix(
+        normalized_mean,
+        root / "phase3_matrix_adjacent_mmd_mean.png",
+        mmd.mean(axis=0).tolist(),
+        mmd_reference="adjacent",
+    )
+    plot_cross_matrix(
+        normalized_mean,
+        root / "phase3_matrix_adjacent_mmd_mean.pdf",
+        mmd.mean(axis=0).tolist(),
+        mmd_reference="adjacent",
     )
     print(json.dumps(summary, indent=2))
 

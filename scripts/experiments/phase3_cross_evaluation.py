@@ -131,8 +131,15 @@ def evaluate_forecaster_output_mmd(
     loader: Any,
     adjacency: torch.Tensor,
     device: torch.device,
+    reference: str = "initial",
 ) -> list[float]:
-    """Measure each forecaster state's output shift from the initial state."""
+    """Measure MMD across forecaster states.
+
+    ``initial`` reports MMD(F0, Fi); ``adjacent`` reports
+    MMD(F{i-1}, Fi), which directly measures successive-stage shift.
+    """
+    if reference not in {"initial", "adjacent"}:
+        raise ValueError("reference must be 'initial' or 'adjacent'")
     def collect_outputs() -> torch.Tensor:
         forecaster.eval()
         chunks = []
@@ -160,9 +167,12 @@ def evaluate_forecaster_output_mmd(
     for state in forecaster_states:
         forecaster.load_state_dict(state)
         outputs.append(collect_outputs())
-    reference = outputs[0]
-    return [0.0 if index == 0 else rbf_mmd(reference, output)
-            for index, output in enumerate(outputs)]
+    if reference == "initial":
+        initial = outputs[0]
+        return [0.0 if index == 0 else rbf_mmd(initial, output)
+                for index, output in enumerate(outputs)]
+    return [0.0] + [rbf_mmd(outputs[index - 1], outputs[index])
+                     for index in range(1, len(outputs))]
 
 
 def save_matrix_csv(
@@ -212,12 +222,17 @@ def plot_cross_matrix(
     matrix: np.ndarray,
     output_path: Path,
     forecaster_mmd: list[float] | None = None,
+    mmd_reference: str = "initial",
 ) -> None:
     plt.rcParams["font.family"] = "Noto Sans CJK SC"
     plt.rcParams["axes.unicode_minus"] = False
     size = matrix.shape[0]
     if forecaster_mmd is None:
         labels = [f"$F_{{{index}}}$" for index in range(size)]
+    elif mmd_reference == "adjacent":
+        labels = [f"$F_{{{index}}}$" if index == 0 else
+                  f"$F_{{{index}}}$\n$\\Delta D_{{{index}}}={forecaster_mmd[index]:.2f}$"
+                  for index in range(size)]
     else:
         labels = [f"$F_{{{index}}}$\n$D={forecaster_mmd[index]:.2f}$"
                   for index in range(size)]
@@ -228,9 +243,17 @@ def plot_cross_matrix(
     if np.isclose(vmin, vmax):
         vmax = vmin + 1e-3
     image = ax.imshow(matrix, cmap="YlGnBu", vmin=vmin, vmax=vmax, aspect="equal")
-    ax.set_xticks(np.arange(size), labels=labels, fontsize=15)
+    ax.set_xticks(
+        np.arange(size),
+        labels=labels,
+        fontsize=11 if mmd_reference == "adjacent" else 15,
+    )
     ax.set_yticks(np.arange(size), labels=row_labels, fontsize=18)
-    ax.set_xlabel("Forecaster state (D: MMD from F0)", fontsize=18, labelpad=23)
+    if mmd_reference == "adjacent":
+        xlabel = r"Forecaster state ($\Delta D_i=\mathrm{MMD}(F_{i-1},F_i)$)"
+    else:
+        xlabel = "Forecaster state (D: MMD from F0)"
+    ax.set_xlabel(xlabel, fontsize=18, labelpad=23)
     ax.set_ylabel("Surrogate state", fontsize=21, labelpad=22)
     ax.tick_params(length=0, pad=8)
     ax.set_title(
@@ -273,7 +296,12 @@ def plot_cross_matrix(
         "All values are normalized by the (S0, F0) test-set operating cost.",
         ha="center", fontsize=11,
     )
-    fig.subplots_adjust(left=0.15, right=0.86, top=0.79, bottom=0.18)
+    fig.subplots_adjust(
+        left=0.15,
+        right=0.86,
+        top=0.79,
+        bottom=0.22 if mmd_reference == "adjacent" else 0.18,
+    )
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
