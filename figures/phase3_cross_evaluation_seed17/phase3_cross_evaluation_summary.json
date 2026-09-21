@@ -1,0 +1,219 @@
+{
+  "experiment": "phase3_cross_evaluation_iterative_adaptation",
+  "config": "configs/ieee13.yaml",
+  "data": "data/ieee13.npz",
+  "device": "cuda",
+  "seed": 17,
+  "test_fraction": 0.2,
+  "rounds": 5,
+  "state_labels": {
+    "forecast": [
+      "F0",
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5"
+    ],
+    "surrogate": [
+      "S0",
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5"
+    ]
+  },
+  "definition": "E[i,j] is the test-set operating cost of surrogate S_i with forecaster F_j; all normalized values divide by E[0,0].",
+  "baseline_operating_cost": 2191.206787109375,
+  "raw_operating_cost": [
+    [
+      2191.206787109375,
+      2190.944580078125,
+      2258.161865234375,
+      2272.41943359375,
+      2266.130126953125,
+      2267.4951171875
+    ],
+    [
+      2234.114013671875,
+      2184.0185546875,
+      2228.857666015625,
+      2244.6796875,
+      2254.25439453125,
+      2273.676025390625
+    ],
+    [
+      2274.437255859375,
+      2200.32080078125,
+      2182.48486328125,
+      2193.9296875,
+      2209.881103515625,
+      2228.912841796875
+    ],
+    [
+      2340.57373046875,
+      2240.644775390625,
+      2199.9599609375,
+      2172.83544921875,
+      2176.7734375,
+      2186.62646484375
+    ],
+    [
+      2355.552734375,
+      2295.59326171875,
+      2240.2265625,
+      2182.082275390625,
+      2173.798828125,
+      2178.00634765625
+    ],
+    [
+      2364.217041015625,
+      2327.3466796875,
+      2276.0576171875,
+      2197.82861328125,
+      2183.1806640625,
+      2175.1787109375
+    ]
+  ],
+  "normalized_operating_cost": [
+    [
+      1.0,
+      0.9998803367017698,
+      1.0305562571816085,
+      1.037062976877463,
+      1.0341927289950523,
+      1.0348156689395638
+    ],
+    [
+      1.0195815505934531,
+      0.9967195097860401,
+      1.0171827137117984,
+      1.0244034021367587,
+      1.0287730066339595,
+      1.0376364470785722
+    ],
+    [
+      1.0379838494657991,
+      1.0041593580877404,
+      0.9960195797679,
+      1.001242648757134,
+      1.0085223889028223,
+      1.0172078942568636
+    ],
+    [
+      1.0681665209500464,
+      1.0225619912151094,
+      1.0039946817797476,
+      0.9916158812583543,
+      0.9934130590986279,
+      0.9979096805045646
+    ],
+    [
+      1.0750024818435457,
+      1.047638805804851,
+      1.0223711315969826,
+      0.9958358509235967,
+      0.9920555380319265,
+      0.9939757217206602
+    ],
+    [
+      1.0789566073471706,
+      1.062130098071538,
+      1.038723332994993,
+      1.003021999662848,
+      0.99633712203974,
+      0.9926852744952387
+    ]
+  ],
+  "diagonal_normalized_cost": [
+    1.0,
+    0.9967195097860401,
+    0.9960195797679,
+    0.9916158812583543,
+    0.9920555380319265,
+    0.9926852744952387
+  ],
+  "fixed_S0_relative_change_at_last_forecaster": 0.03481566893956378,
+  "matched_pair_relative_change_from_initial": -0.00731472550476131,
+  "round_records": [
+    {
+      "stage": 0,
+      "forecaster_epochs": 0,
+      "surrogate_epochs": 0,
+      "forecast_loss_cap": 390.1823812743246
+    },
+    {
+      "stage": 1,
+      "forecaster_epochs": 100,
+      "surrogate_epochs": 20,
+      "elapsed_seconds": 25.750035762786865,
+      "forecaster_learning_rate": 0.0001879422849416733,
+      "surrogate_learning_rate": 0.0002,
+      "surrogate_train_loss": 1151.0948466951884,
+      "surrogate_train_operating_cost": 2263.086694961939,
+      "forecaster_train_loss": 1127.819583357181,
+      "forecaster_train_forecast_loss": 352.6896224062667,
+      "forecaster_train_operating_cost": 2200.6070307730465
+    },
+    {
+      "stage": 2,
+      "forecaster_epochs": 100,
+      "surrogate_epochs": 20,
+      "elapsed_seconds": 25.56278395652771,
+      "forecaster_learning_rate": 0.00014444150835275652,
+      "surrogate_learning_rate": 0.00017363960921764376,
+      "surrogate_train_loss": 1127.3895494696276,
+      "surrogate_train_operating_cost": 2218.461699731475,
+      "forecaster_train_loss": 1118.6265089619583,
+      "forecaster_train_forecast_loss": 380.54195388216385,
+      "forecaster_train_operating_cost": 2197.8953873817154
+    },
+    {
+      "stage": 3,
+      "forecaster_epochs": 100,
+      "surrogate_epochs": 20,
+      "elapsed_seconds": 25.60450315475464,
+      "forecaster_learning_rate": 8.670628607273103e-05,
+      "surrogate_learning_rate": 0.00010999999606597506,
+      "surrogate_train_loss": 1107.0962325434982,
+      "surrogate_train_operating_cost": 2210.0721842447915,
+      "forecaster_train_loss": 1100.909647698222,
+      "forecaster_train_forecast_loss": 388.1563459869124,
+      "forecaster_train_operating_cost": 2193.9454603556164
+    },
+    {
+      "stage": 4,
+      "forecaster_epochs": 100,
+      "surrogate_epochs": 20,
+      "elapsed_seconds": 25.605799436569214,
+      "forecaster_learning_rate": 3.859820127487183e-05,
+      "surrogate_learning_rate": 4.6360390782356266e-05,
+      "surrogate_train_loss": 1103.3409639947727,
+      "surrogate_train_operating_cost": 2203.427158453526,
+      "forecaster_train_loss": 1100.759769053104,
+      "forecaster_train_forecast_loss": 383.89092223897524,
+      "forecaster_train_operating_cost": 2190.6705958700586
+    },
+    {
+      "stage": 5,
+      "forecaster_epochs": 100,
+      "surrogate_epochs": 20,
+      "elapsed_seconds": 25.606213092803955,
+      "forecaster_learning_rate": 2e-05,
+      "surrogate_learning_rate": 2e-05,
+      "surrogate_train_loss": 1103.2773055937118,
+      "surrogate_train_operating_cost": 2203.5108226734205,
+      "forecaster_train_loss": 1102.206019363124,
+      "forecaster_train_forecast_loss": 389.5615998246003,
+      "forecaster_train_operating_cost": 2191.169197799813
+    }
+  ],
+  "elapsed_seconds": 129.78647232055664,
+  "outputs": {
+    "png": "figures/phase3_cross_evaluation_seed17/phase3_cross_evaluation_matrix.png",
+    "svg": "figures/phase3_cross_evaluation_seed17/phase3_cross_evaluation_matrix.svg",
+    "csv": "figures/phase3_cross_evaluation_seed17/phase3_cross_evaluation_matrix.csv",
+    "npz": "figures/phase3_cross_evaluation_seed17/phase3_cross_evaluation_matrix.npz"
+  }
+}

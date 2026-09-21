@@ -221,6 +221,7 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=None)
     parser.add_argument("--forecaster-epochs-total", type=int, default=None)
     parser.add_argument("--surrogate-epochs-total", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
 
     started = time.time()
@@ -243,13 +244,14 @@ def main() -> None:
     if surrogate_epochs_total < rounds:
         raise ValueError("Total surrogate epochs must be at least the number of rounds.")
 
-    torch.manual_seed(config.seed)
-    np.random.seed(config.seed)
+    seed = config.seed if args.seed is None else args.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
     dataset = ScenarioDataset(args.data)
     validate_dataset_matches_config(dataset, config)
     train_loader, test_loader = make_train_test_loaders(
         dataset, batch_size=config.training.batch_size,
-        test_fraction=args.test_fraction, seed=config.seed,
+        test_fraction=args.test_fraction, seed=seed,
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     nodes = dataset.pv_history.size(2)
@@ -391,7 +393,7 @@ def main() -> None:
     summary = {
         "experiment": "phase3_cross_evaluation_iterative_adaptation",
         "config": str(Path(args.config)), "data": str(Path(args.data)),
-        "device": str(device), "test_fraction": args.test_fraction,
+        "device": str(device), "seed": seed, "test_fraction": args.test_fraction,
         "rounds": rounds,
         "state_labels": {
             "forecast": [f"F{i}" for i in range(rounds + 1)],
