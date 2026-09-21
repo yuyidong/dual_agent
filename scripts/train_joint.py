@@ -154,9 +154,18 @@ def main() -> None:
     )
     global_epoch = 0
     tracker_step = 0
+    early_stopping_enabled = config.training.phase3_early_stopping_patience > 0
     try:
         for round_index, forecaster_epochs in enumerate(forecaster_epochs_per_round, start=1):
             surrogate_epochs = _joint_surrogate_epochs_for_round(config.training, round_index)
+            surrogate_best_operating_cost = float("inf")
+            surrogate_bad_epochs = 0
+            surrogate_best_state = None
+            surrogate_early_stopped = False
+            forecaster_best_operating_cost = float("inf")
+            forecaster_bad_epochs = 0
+            forecaster_best_state = None
+            forecaster_early_stopped = False
             reference_surrogate = None
             if (
                 surrogate_epochs
@@ -225,6 +234,27 @@ def main() -> None:
                     f"train_loss={surrogate_train_metrics['loss']:.6f} "
                     f"test_loss={surrogate_test_metrics['loss']:.6f}"
                 )
+                if early_stopping_enabled:
+                    validation_cost = surrogate_test_metrics["operating_cost"]
+                    if (
+                        validation_cost
+                        < surrogate_best_operating_cost
+                        * (1.0 - config.training.phase3_early_stopping_min_delta)
+                    ):
+                        surrogate_best_operating_cost = validation_cost
+                        surrogate_best_state = copy.deepcopy(system.surrogate.state_dict())
+                        surrogate_bad_epochs = 0
+                    else:
+                        surrogate_bad_epochs += 1
+                    if surrogate_bad_epochs >= config.training.phase3_early_stopping_patience:
+                        surrogate_early_stopped = True
+                        if surrogate_best_state is not None:
+                            system.surrogate.load_state_dict(surrogate_best_state)
+                        print(
+                            f"round={round_index:02d} stage=surrogate early_stop "
+                            f"best_operating_cost={surrogate_best_operating_cost:.6f}"
+                        )
+                        break
 
             if reference_surrogate is not None:
                 del reference_surrogate
@@ -349,6 +379,27 @@ def main() -> None:
                     f"soc_violation={test_metrics['soc_violation']:.6f} "
                     f"terminal_soc_deviation={test_metrics['terminal_soc_deviation']:.6f}"
                 )
+                if early_stopping_enabled:
+                    validation_cost = test_metrics["operating_cost"]
+                    if (
+                        validation_cost
+                        < forecaster_best_operating_cost
+                        * (1.0 - config.training.phase3_early_stopping_min_delta)
+                    ):
+                        forecaster_best_operating_cost = validation_cost
+                        forecaster_best_state = copy.deepcopy(system.forecaster.state_dict())
+                        forecaster_bad_epochs = 0
+                    else:
+                        forecaster_bad_epochs += 1
+                    if forecaster_bad_epochs >= config.training.phase3_early_stopping_patience:
+                        forecaster_early_stopped = True
+                        if forecaster_best_state is not None:
+                            system.forecaster.load_state_dict(forecaster_best_state)
+                        print(
+                            f"round={round_index:02d} stage=forecaster early_stop "
+                            f"best_operating_cost={forecaster_best_operating_cost:.6f}"
+                        )
+                        break
     finally:
         tracker.finish()
 

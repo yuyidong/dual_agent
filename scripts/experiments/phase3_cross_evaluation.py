@@ -306,19 +306,35 @@ def main() -> None:
     )
     print(f"initial_train_forecast_loss={initial_forecast_loss:.6f}")
 
+    early_stopping_enabled = config.training.phase3_early_stopping_patience > 0
+    validation_interval = config.training.phase3_validation_interval
+    early_stopping_patience = config.training.phase3_early_stopping_patience
+    early_stopping_min_delta = config.training.phase3_early_stopping_min_delta
     for round_index in range(rounds):
         round_start = time.time()
         last_surrogate_metrics = None
         last_forecaster_metrics = None
+        requested_surrogate_epochs = surrogate_epochs[round_index]
+        requested_forecaster_epochs = forecaster_epochs[round_index]
+        actual_surrogate_epochs = 0
+        actual_forecaster_epochs = 0
+        surrogate_best_operating_cost = float("inf")
+        forecaster_best_operating_cost = float("inf")
+        surrogate_bad_epochs = 0
+        forecaster_bad_epochs = 0
+        surrogate_early_stopped = False
+        forecaster_early_stopped = False
+        best_surrogate_state = None
+        best_forecaster_state = None
         reference_surrogate = None
         if (
-            surrogate_epochs[round_index]
+            requested_surrogate_epochs
             and config.training.surrogate_consistency_loss_weight > 0.0
         ):
             reference_surrogate = copy.deepcopy(system.surrogate).to(device).eval()
             for parameter in reference_surrogate.parameters():
                 parameter.requires_grad_(False)
-        for _ in range(surrogate_epochs[round_index]):
+        for surrogate_epoch in range(requested_surrogate_epochs):
             last_surrogate_metrics = train_surrogate_epoch(
                 system.surrogate, evaluator, train_loader, surrogate_optimizer,
                 adjacency, device, system.forecaster,
@@ -332,9 +348,36 @@ def main() -> None:
                 reference_surrogate,
                 config.training.surrogate_consistency_loss_weight,
             )
+            actual_surrogate_epochs = surrogate_epoch + 1
+            should_validate = (
+                early_stopping_enabled
+                and (
+                    actual_surrogate_epochs % validation_interval == 0
+                    or actual_surrogate_epochs == requested_surrogate_epochs
+                )
+            )
+            if should_validate:
+                validation_metrics = evaluate_pair(
+                    forecaster, surrogate, evaluator, test_loader, adjacency, device
+                )
+                validation_cost = validation_metrics["operating_cost"]
+                if (
+                    validation_cost
+                    < surrogate_best_operating_cost * (1.0 - early_stopping_min_delta)
+                ):
+                    surrogate_best_operating_cost = validation_cost
+                    best_surrogate_state = cpu_state_dict(surrogate)
+                    surrogate_bad_epochs = 0
+                else:
+                    surrogate_bad_epochs += validation_interval
+                if surrogate_bad_epochs >= early_stopping_patience:
+                    surrogate_early_stopped = True
+                    break
+        if best_surrogate_state is not None:
+            surrogate.load_state_dict(best_surrogate_state)
         if reference_surrogate is not None:
             del reference_surrogate
-        for _ in range(forecaster_epochs[round_index]):
+        for forecaster_epoch in range(requested_forecaster_epochs):
             last_forecaster_metrics = train_joint_epoch(
                 system, evaluator, train_loader, forecaster_optimizer,
                 adjacency, device, forecast_loss_cap,
@@ -347,12 +390,49 @@ def main() -> None:
                 config.training.terminal_soc_loss_weight,
                 forecaster_scheduler, config.training.max_grad_norm,
             )
+            actual_forecaster_epochs = forecaster_epoch + 1
+            should_validate = (
+                early_stopping_enabled
+                and (
+                    actual_forecaster_epochs % validation_interval == 0
+                    or actual_forecaster_epochs == requested_forecaster_epochs
+                )
+            )
+            if should_validate:
+                validation_metrics = evaluate_pair(
+                    forecaster, surrogate, evaluator, test_loader, adjacency, device
+                )
+                validation_cost = validation_metrics["operating_cost"]
+                if (
+                    validation_cost
+                    < forecaster_best_operating_cost * (1.0 - early_stopping_min_delta)
+                ):
+                    forecaster_best_operating_cost = validation_cost
+                    best_forecaster_state = cpu_state_dict(forecaster)
+                    forecaster_bad_epochs = 0
+                else:
+                    forecaster_bad_epochs += validation_interval
+                if forecaster_bad_epochs >= early_stopping_patience:
+                    forecaster_early_stopped = True
+                    break
+        if best_forecaster_state is not None:
+            forecaster.load_state_dict(best_forecaster_state)
         forecaster_states.append(cpu_state_dict(forecaster))
         surrogate_states.append(cpu_state_dict(surrogate))
         record: dict[str, Any] = {
             "stage": round_index + 1,
-            "forecaster_epochs": forecaster_epochs[round_index],
-            "surrogate_epochs": surrogate_epochs[round_index],
+            "forecaster_epochs": actual_forecaster_epochs,
+            "surrogate_epochs": actual_surrogate_epochs,
+            "requested_forecaster_epochs": requested_forecaster_epochs,
+            "requested_surrogate_epochs": requested_surrogate_epochs,
+            "surrogate_early_stopped": surrogate_early_stopped,
+            "forecaster_early_stopped": forecaster_early_stopped,
+            "surrogate_best_validation_operating_cost": (
+                None if best_surrogate_state is None else surrogate_best_operating_cost
+            ),
+            "forecaster_best_validation_operating_cost": (
+                None if best_forecaster_state is None else forecaster_best_operating_cost
+            ),
             "elapsed_seconds": time.time() - round_start,
             "forecaster_learning_rate": current_learning_rate(forecaster_optimizer),
             "surrogate_learning_rate": current_learning_rate(surrogate_optimizer),
@@ -366,10 +446,12 @@ def main() -> None:
             record["forecaster_train_operating_cost"] = last_forecaster_metrics["operating_cost"]
         round_records.append(record)
         print(
-            f"stage={round_index + 1} surrogate_epochs={surrogate_epochs[round_index]} "
-            f"forecaster_epochs={forecaster_epochs[round_index]} "
-            f"surrogate_loss={record.get('surrogate_train_loss', float('nan')):.6f} "
-            f"forecaster_loss={record.get('forecaster_train_loss', float('nan')):.6f} "
+            f"stage={round_index + 1} "
+            f"surrogate_epochs={actual_surrogate_epochs}/{requested_surrogate_epochs} "
+            f"forecaster_epochs={actual_forecaster_epochs}/{requested_forecaster_epochs} "
+            f"surrogate_best={record.get('surrogate_best_validation_operating_cost', float('nan')):.3f} "
+            f"forecaster_best={record.get('forecaster_best_validation_operating_cost', float('nan')):.3f} "
+            f"early_stop=({surrogate_early_stopped},{forecaster_early_stopped}) "
             f"elapsed={record['elapsed_seconds']:.1f}s"
         )
 
