@@ -93,6 +93,7 @@ class TrainingConfig:
     kw_violation_loss_weight: float
     soc_violation_loss_weight: float
     terminal_soc_loss_weight: float
+    surrogate_consistency_loss_weight: float
 
 
 @dataclass(frozen=True)
@@ -165,6 +166,7 @@ def load_config(path: str | Path) -> ExperimentConfig:
     training_raw.setdefault("phase3_rounds", training_raw["joint_rounds"])
     training_raw.setdefault("joint_forecast_loss_tolerance", 0.05)
     training_raw.setdefault("joint_forecast_constraint_weight", 1.0)
+    training_raw.setdefault("surrogate_consistency_loss_weight", 0.0)
     training_raw.setdefault(
         "operating_cost_loss_weight",
         training_raw.get("decision_loss_weight", 1.0),
@@ -193,6 +195,8 @@ def load_config(path: str | Path) -> ExperimentConfig:
     training_raw.pop("decision_loss_weight", None)
     training_raw.pop("risk_loss_weight", None)
     training_raw.pop("soc_loss_weight", None)
+    if float(training_raw["surrogate_consistency_loss_weight"]) < 0:
+        raise ValueError("training.surrogate_consistency_loss_weight must be non-negative.")
     if int(training_raw["joint_rounds"]) < 1:
         raise ValueError("training.joint_rounds must be at least 1.")
     if int(training_raw["joint_surrogate_epochs_per_round"]) < 1:

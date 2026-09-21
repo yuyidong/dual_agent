@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 
 from _bootstrap import add_src_to_path
 
@@ -125,6 +126,7 @@ def main() -> None:
             "joint_alternating_updates": config.training.joint_alternating_updates,
             "joint_rounds": config.training.joint_rounds,
             "joint_surrogate_epochs_per_round": config.training.joint_surrogate_epochs_per_round,
+            "surrogate_consistency_loss_weight": config.training.surrogate_consistency_loss_weight,
         },
     )
 
@@ -155,6 +157,14 @@ def main() -> None:
     try:
         for round_index, forecaster_epochs in enumerate(forecaster_epochs_per_round, start=1):
             surrogate_epochs = _joint_surrogate_epochs_for_round(config.training, round_index)
+            reference_surrogate = None
+            if (
+                surrogate_epochs
+                and config.training.surrogate_consistency_loss_weight > 0.0
+            ):
+                reference_surrogate = copy.deepcopy(system.surrogate).to(device).eval()
+                for parameter in reference_surrogate.parameters():
+                    parameter.requires_grad_(False)
             if surrogate_epochs:
                 print(
                     f"round={round_index:02d}/{active_rounds:02d} "
@@ -177,6 +187,8 @@ def main() -> None:
                     config.training.terminal_soc_loss_weight,
                     surrogate_scheduler,
                     config.training.max_grad_norm,
+                    reference_surrogate,
+                    config.training.surrogate_consistency_loss_weight,
                 )
                 surrogate_test_metrics = evaluate_surrogate_loss(
                     system.surrogate,
@@ -191,6 +203,8 @@ def main() -> None:
                     config.training.kw_violation_loss_weight,
                     config.training.soc_violation_loss_weight,
                     config.training.terminal_soc_loss_weight,
+                    reference_surrogate,
+                    config.training.surrogate_consistency_loss_weight,
                 )
                 tracker_step += 1
                 tracker.log(
@@ -211,6 +225,9 @@ def main() -> None:
                     f"train_loss={surrogate_train_metrics['loss']:.6f} "
                     f"test_loss={surrogate_test_metrics['loss']:.6f}"
                 )
+
+            if reference_surrogate is not None:
+                del reference_surrogate
 
             if forecaster_epochs == 0:
                 continue
@@ -385,6 +402,9 @@ def _surrogate_stage_log_metrics(
     for source, destination in metric_names.items():
         logged[f"train/{destination}"] = train_metrics[source]
         logged[f"test/{destination}"] = test_metrics[source]
+    if "surrogate_consistency_loss" in train_metrics:
+        logged["train/surrogate_consistency_loss"] = train_metrics["surrogate_consistency_loss"]
+        logged["test/surrogate_consistency_loss"] = test_metrics["surrogate_consistency_loss"]
     logged["train/lindistflow_loss"] = train_metrics["loss"]
     logged["test/lindistflow_loss"] = test_metrics["loss"]
     return logged

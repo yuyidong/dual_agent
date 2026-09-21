@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import time
@@ -309,6 +310,14 @@ def main() -> None:
         round_start = time.time()
         last_surrogate_metrics = None
         last_forecaster_metrics = None
+        reference_surrogate = None
+        if (
+            surrogate_epochs[round_index]
+            and config.training.surrogate_consistency_loss_weight > 0.0
+        ):
+            reference_surrogate = copy.deepcopy(system.surrogate).to(device).eval()
+            for parameter in reference_surrogate.parameters():
+                parameter.requires_grad_(False)
         for _ in range(surrogate_epochs[round_index]):
             last_surrogate_metrics = train_surrogate_epoch(
                 system.surrogate, evaluator, train_loader, surrogate_optimizer,
@@ -320,7 +329,11 @@ def main() -> None:
                 config.training.soc_violation_loss_weight,
                 config.training.terminal_soc_loss_weight,
                 surrogate_scheduler, config.training.max_grad_norm,
+                reference_surrogate,
+                config.training.surrogate_consistency_loss_weight,
             )
+        if reference_surrogate is not None:
+            del reference_surrogate
         for _ in range(forecaster_epochs[round_index]):
             last_forecaster_metrics = train_joint_epoch(
                 system, evaluator, train_loader, forecaster_optimizer,

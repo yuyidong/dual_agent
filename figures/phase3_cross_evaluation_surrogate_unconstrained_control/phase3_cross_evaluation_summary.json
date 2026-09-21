@@ -1,0 +1,219 @@
+{
+  "experiment": "phase3_cross_evaluation_iterative_adaptation",
+  "config": "configs/ieee13_surrogate_unconstrained_control.yaml",
+  "data": "data/ieee13.npz",
+  "device": "cuda",
+  "seed": 7,
+  "test_fraction": 0.2,
+  "rounds": 5,
+  "state_labels": {
+    "forecast": [
+      "F0",
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5"
+    ],
+    "surrogate": [
+      "S0",
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5"
+    ]
+  },
+  "definition": "E[i,j] is the test-set operating cost of surrogate S_i with forecaster F_j; all normalized values divide by E[0,0].",
+  "baseline_operating_cost": 1983.017578125,
+  "raw_operating_cost": [
+    [
+      1983.017578125,
+      1897.8795166015625,
+      1986.3338623046875,
+      2109.421875,
+      2024.667236328125,
+      2033.1661376953125
+    ],
+    [
+      2045.8057861328125,
+      1887.6043701171875,
+      1921.8531494140625,
+      2002.2069091796875,
+      1992.6512451171875,
+      2015.9051513671875
+    ],
+    [
+      2117.829833984375,
+      1983.169189453125,
+      1848.1134033203125,
+      1892.8114013671875,
+      1944.112548828125,
+      1979.8460693359375
+    ],
+    [
+      2169.083740234375,
+      2083.083251953125,
+      1947.1072998046875,
+      1864.26953125,
+      1889.0201416015625,
+      1913.8555908203125
+    ],
+    [
+      2210.808349609375,
+      2130.245361328125,
+      2024.1837158203125,
+      1928.0804443359375,
+      1884.63720703125,
+      1902.6617431640625
+    ],
+    [
+      2232.629150390625,
+      2149.60400390625,
+      2063.025634765625,
+      1987.7757568359375,
+      1919.263916015625,
+      1877.851318359375
+    ]
+  ],
+  "normalized_operating_cost": [
+    [
+      1.0,
+      0.9570664110784444,
+      1.001672342301082,
+      1.0637434071535155,
+      1.0210031714607926,
+      1.0252890141386086
+    ],
+    [
+      1.0316629608836754,
+      0.9518848400234412,
+      0.9691558817301205,
+      1.0096768335623285,
+      1.0048580845164754,
+      1.0165846100432876
+    ],
+    [
+      1.0679833892278674,
+      1.0000764548583922,
+      0.9319702577058125,
+      0.954510651971575,
+      0.9803808953959647,
+      0.9984006653173184
+    ],
+    [
+      1.0938298097615988,
+      1.0504613145803479,
+      0.9818910943017123,
+      0.940117501637439,
+      0.9525987880489114,
+      0.9651228571709979
+    ],
+    [
+      1.1148707777465885,
+      1.0742443157474848,
+      1.020759340789221,
+      0.9722961942470489,
+      0.9503885531933753,
+      0.9594780016842229
+    ],
+    [
+      1.1258746140322367,
+      1.0840065300574704,
+      1.040346619981188,
+      1.0023994637079499,
+      0.9678501780253225,
+      0.9469665519228212
+    ]
+  ],
+  "diagonal_normalized_cost": [
+    1.0,
+    0.9518848400234412,
+    0.9319702577058125,
+    0.940117501637439,
+    0.9503885531933753,
+    0.9469665519228212
+  ],
+  "fixed_S0_relative_change_at_last_forecaster": 0.025289014138608623,
+  "matched_pair_relative_change_from_initial": -0.0530334480771788,
+  "round_records": [
+    {
+      "stage": 0,
+      "forecaster_epochs": 0,
+      "surrogate_epochs": 0,
+      "forecast_loss_cap": 406.88021571120936
+    },
+    {
+      "stage": 1,
+      "forecaster_epochs": 300,
+      "surrogate_epochs": 200,
+      "elapsed_seconds": 94.3973171710968,
+      "forecaster_learning_rate": 9.271396428346635e-05,
+      "surrogate_learning_rate": 9.33497551083565e-06,
+      "surrogate_train_loss": 977.144286662231,
+      "surrogate_train_operating_cost": 1910.4935945131258,
+      "forecaster_train_loss": 941.5831175863525,
+      "forecaster_train_forecast_loss": 400.19908542656344,
+      "forecaster_train_operating_cost": 1821.0110082381811
+    },
+    {
+      "stage": 2,
+      "forecaster_epochs": 300,
+      "surrogate_epochs": 200,
+      "elapsed_seconds": 94.74422359466553,
+      "forecaster_learning_rate": 7.054142579436303e-05,
+      "surrogate_learning_rate": 7.137572288513184e-06,
+      "surrogate_train_loss": 946.2825821910294,
+      "surrogate_train_operating_cost": 1825.8692060570722,
+      "forecaster_train_loss": 936.2897455869868,
+      "forecaster_train_forecast_loss": 415.9106145353399,
+      "forecaster_train_operating_cost": 1789.6103929978442
+    },
+    {
+      "stage": 3,
+      "forecaster_epochs": 300,
+      "surrogate_epochs": 200,
+      "elapsed_seconds": 94.73800921440125,
+      "forecaster_learning_rate": 4.219625934958459e-05,
+      "surrogate_learning_rate": 4.276764497160912e-06,
+      "surrogate_train_loss": 938.0147291469923,
+      "surrogate_train_operating_cost": 1796.1685746301225,
+      "forecaster_train_loss": 944.4869348248865,
+      "forecaster_train_forecast_loss": 443.36543827266485,
+      "forecaster_train_operating_cost": 1793.9864487048326
+    },
+    {
+      "stage": 4,
+      "forecaster_epochs": 300,
+      "surrogate_epochs": 200,
+      "elapsed_seconds": 94.66956520080566,
+      "forecaster_learning_rate": 1.893638551235199e-05,
+      "surrogate_learning_rate": 1.911507159471512e-06,
+      "surrogate_train_loss": 937.4991620521406,
+      "surrogate_train_operating_cost": 1795.4546947735425,
+      "forecaster_train_loss": 951.2378153259501,
+      "forecaster_train_forecast_loss": 421.16194583208136,
+      "forecaster_train_operating_cost": 1815.7596569690077
+    },
+    {
+      "stage": 5,
+      "forecaster_epochs": 300,
+      "surrogate_epochs": 200,
+      "elapsed_seconds": 94.64275527000427,
+      "forecaster_learning_rate": 1e-05,
+      "surrogate_learning_rate": 1.0000000000000002e-06,
+      "surrogate_train_loss": 940.4287464109242,
+      "surrogate_train_operating_cost": 1802.3301584618723,
+      "forecaster_train_loss": 947.496819688287,
+      "forecaster_train_forecast_loss": 416.454834282471,
+      "forecaster_train_operating_cost": 1809.6560884319674
+    }
+  ],
+  "elapsed_seconds": 474.95906829833984,
+  "outputs": {
+    "png": "figures/phase3_cross_evaluation_surrogate_unconstrained_control/phase3_cross_evaluation_matrix.png",
+    "svg": "figures/phase3_cross_evaluation_surrogate_unconstrained_control/phase3_cross_evaluation_matrix.svg",
+    "csv": "figures/phase3_cross_evaluation_surrogate_unconstrained_control/phase3_cross_evaluation_matrix.csv",
+    "npz": "figures/phase3_cross_evaluation_surrogate_unconstrained_control/phase3_cross_evaluation_matrix.npz"
+  }
+}

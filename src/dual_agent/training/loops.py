@@ -96,6 +96,8 @@ def train_surrogate_epoch(
     terminal_soc_weight: float,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
     max_grad_norm: float | None = None,
+    reference_model: OPFSurrogate | None = None,
+    consistency_weight: float = 0.0,
 ) -> dict[str, float]:
     model.train()
     if forecaster is not None:
@@ -121,6 +123,16 @@ def train_surrogate_epoch(
             soc_weight,
             terminal_soc_weight,
         )
+        consistency_penalty = None
+        if reference_model is not None and consistency_weight > 0.0:
+            with torch.no_grad():
+                reference_prediction = reference_model(
+                    pv_scenarios, batch["load_forecast"], adjacency.to(device)
+                )
+            consistency_penalty = consistency_weight * _surrogate_dispatch_consistency(
+                model, prediction["dispatch"], reference_prediction["dispatch"], result["operating_cost"]
+            )
+            loss = loss + consistency_penalty.mean()
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         if max_grad_norm is not None:
@@ -141,6 +153,7 @@ def train_surrogate_epoch(
             kw_violation_weight,
             soc_weight,
             terminal_soc_weight,
+            consistency_penalty,
         )
     return {key: value / samples for key, value in totals.items()}
 
@@ -159,6 +172,8 @@ def evaluate_surrogate_loss(
     kw_violation_weight: float,
     soc_weight: float,
     terminal_soc_weight: float,
+    reference_model: OPFSurrogate | None = None,
+    consistency_weight: float = 0.0,
 ) -> dict[str, float]:
     model.eval()
     if forecaster is not None:
@@ -184,6 +199,15 @@ def evaluate_surrogate_loss(
             soc_weight,
             terminal_soc_weight,
         )
+        consistency_penalty = None
+        if reference_model is not None and consistency_weight > 0.0:
+            reference_prediction = reference_model(
+                pv_scenarios, batch["load_forecast"], adjacency.to(device)
+            )
+            consistency_penalty = consistency_weight * _surrogate_dispatch_consistency(
+                model, prediction["dispatch"], reference_prediction["dispatch"], result["operating_cost"]
+            )
+            loss = loss + consistency_penalty.mean()
         batch_size = batch["pv_history"].size(0)
         samples += batch_size
         _accumulate_surrogate_metrics(
@@ -197,8 +221,23 @@ def evaluate_surrogate_loss(
             kw_violation_weight,
             soc_weight,
             terminal_soc_weight,
+            consistency_penalty,
         )
     return {key: value / samples for key, value in totals.items()}
+
+
+def _surrogate_dispatch_consistency(
+    model: OPFSurrogate,
+    dispatch: torch.Tensor,
+    reference_dispatch: torch.Tensor,
+    operating_cost: torch.Tensor,
+) -> torch.Tensor:
+    if model.kw_rated is not None:
+        scale = model.kw_rated.detach().mean().clamp_min(1.0)
+    else:
+        scale = dispatch.detach().abs().mean().clamp_min(1.0)
+    normalized_delta = ((dispatch - reference_dispatch) / scale).pow(2).mean(dim=(1, 2))
+    return operating_cost.detach().clamp_min(1.0) * normalized_delta
 
 
 def _surrogate_training_scenarios(
@@ -230,8 +269,14 @@ def _accumulate_surrogate_metrics(
     kw_violation_weight: float,
     soc_weight: float,
     terminal_soc_weight: float,
+    consistency_penalty: torch.Tensor | None = None,
 ) -> None:
     totals["loss"] = totals.get("loss", 0.0) + float(loss.detach().cpu()) * batch_size
+    if consistency_penalty is not None:
+        totals["surrogate_consistency_loss"] = (
+            totals.get("surrogate_consistency_loss", 0.0)
+            + float(consistency_penalty.detach().mean().cpu()) * batch_size
+        )
     loss_components = _lindistflow_loss_components(
         result,
         cost_weight,
