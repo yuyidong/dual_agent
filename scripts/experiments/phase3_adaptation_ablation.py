@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, Subset
 
 from phase3_cross_evaluation import (
     build_models, cpu_state_dict, evaluate_pair, load_module_checkpoint,
+    evaluate_forecaster_output_mmd,
     load_config, ScenarioDataset, make_train_test_loaders, make_complete_graph,
     DualAgentSystem, TorchLinDistFlowEvaluator, evaluate_forecaster_loss,
     train_joint_epoch, train_surrogate_epoch, split_epochs, plot_cross_matrix,
@@ -142,7 +143,13 @@ def main():
                     for j,(ff,_) in enumerate(states):
                         f.load_state_dict(ff); matrix[i,j]=assess(f,s,test)['operating_cost']
                 np.save(out/f'matrix_{seed}.npy',matrix)
-                plot_cross_matrix(matrix/matrix[0,0],out/f'matrix_{seed}.png')
+                forecaster_mmd = evaluate_forecaster_output_mmd(
+                    f, [ff for ff,_ in states], test, adjacency, device
+                )
+                result['forecaster_output_mmd_from_F0'] = forecaster_mmd
+                plot_cross_matrix(
+                    matrix/matrix[0,0], out/f'matrix_{seed}.png', forecaster_mmd
+                )
             (out/'results.json').write_text(json.dumps(dict(arguments=vars(args),
                 config=Path(args.config).read_text(),train_indices=train_ids,validation_indices=val_ids,
                 test_indices=list(test.dataset.indices),

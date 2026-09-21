@@ -1,0 +1,11 @@
+7 alternating 1 F selected 60 cost 1928.225 1866.936
+7 alternating 1 S selected 40 cost 1866.936 1860.173
+7 alternating 2 F selected 60 cost 1860.173 1832.301
+7 alternating 2 S selected 40 cost 1832.301 1825.258
+7 alternating 3 F selected 40 cost 1825.258 1815.37
+7 alternating 3 S selected 30 cost 1815.37 1809.741
+7 alternating 4 F selected 60 cost 1809.741 1805.936
+7 alternating 4 S selected 40 cost 1805.936 1801.059
+7 alternating 5 F selected 50 cost 1801.059 1797.473
+7 alternating 5 S selected 0 cost 1797.473 1797.473
+FINISHED 7 alternating {'operating_cost': 1858.7020263671875, 'voltage_violation': 0.0, 'line_flow_violation': 0.0, 'kw_violation': 0.0, 'soc_violation': 5.657595725239162e-09, 'terminal_soc_deviation': 0.18045006692409515, 'objective': 965.4410265684128}

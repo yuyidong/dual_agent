@@ -1,15 +1,17 @@
 from pathlib import Path
 import json
+import argparse
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-ROOT = Path(__file__).resolve().parent / "phase3_matrix_actual_full"
-
-
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input-dir", required=True)
+    args = parser.parse_args()
+    root = Path(args.input_dir).resolve()
     mpl.rcParams.update(
         {
             "font.family": "serif",
@@ -22,9 +24,16 @@ def main():
         }
     )
 
-    summary = json.loads((ROOT / "phase3_cross_evaluation_summary.json").read_text())
-    matrix = np.load(ROOT / "phase3_cross_evaluation_matrix.npz")["normalized_operating_cost"]
-    mmd = summary["forecaster_output_mmd_from_F0"]
+    summary_path = root / "phase3_cross_evaluation_summary.json"
+    if summary_path.exists():
+        summary = json.loads(summary_path.read_text())
+        matrix = np.load(root / "phase3_cross_evaluation_matrix.npz")["normalized_operating_cost"]
+        mmd = summary["forecaster_output_mmd_from_F0"]
+    else:
+        summary = json.loads((root / "results.json").read_text())
+        matrix = np.load(root / "matrix_7.npy")
+        matrix = matrix / matrix[0, 0]
+        mmd = summary["results"][0]["forecaster_output_mmd_from_F0"]
     size = matrix.shape[0]
 
     fig, ax = plt.subplots(figsize=(7.0, 6.3), dpi=220)
@@ -68,8 +77,8 @@ def main():
     colorbar.set_label("Normalized dispatch cost", labelpad=10)
     colorbar.outline.set_linewidth(0.7)
 
-    output = ROOT / "phase3_cross_evaluation_matrix_paper.png"
-    output_pdf = ROOT / "phase3_cross_evaluation_matrix_paper.pdf"
+    output = root / "phase3_matrix_paper.png"
+    output_pdf = root / "phase3_matrix_paper.pdf"
     fig.savefig(output, dpi=320, bbox_inches="tight", facecolor="white")
     fig.savefig(output_pdf, bbox_inches="tight", facecolor="white")
     plt.close(fig)
