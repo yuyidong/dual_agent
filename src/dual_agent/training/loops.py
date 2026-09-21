@@ -80,6 +80,16 @@ def evaluate_forecaster_loss(
     return total / len(loader.dataset)
 
 
+def disable_training_dropout(module: torch.nn.Module) -> None:
+    """Disable all stochastic dropout, including attention's functional dropout."""
+    for child in module.modules():
+        if isinstance(child, torch.nn.Dropout):
+            child.p = 0.0
+        elif isinstance(child, (torch.nn.MultiheadAttention, torch.nn.RNN,
+                                torch.nn.GRU, torch.nn.LSTM)):
+            child.dropout = 0.0
+
+
 def train_surrogate_epoch(
     model: OPFSurrogate,
     evaluator: TorchLinDistFlowEvaluator,

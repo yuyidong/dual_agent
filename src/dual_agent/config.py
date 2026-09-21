@@ -99,6 +99,9 @@ class TrainingConfig:
     phase3_early_stopping_patience: int
     phase3_early_stopping_min_delta: float
     phase3_validation_interval: int
+    phase3_disable_dropout: bool
+    phase3_forecaster_first: bool
+    phase3_validation_fraction: float
 
 
 @dataclass(frozen=True)
@@ -177,6 +180,9 @@ def load_config(path: str | Path) -> ExperimentConfig:
     training_raw.setdefault("phase3_early_stopping_patience", 0)
     training_raw.setdefault("phase3_early_stopping_min_delta", 0.001)
     training_raw.setdefault("phase3_validation_interval", 10)
+    training_raw.setdefault("phase3_disable_dropout", False)
+    training_raw.setdefault("phase3_forecaster_first", False)
+    training_raw.setdefault("phase3_validation_fraction", 0.2)
     training_raw.setdefault(
         "operating_cost_loss_weight",
         training_raw.get("decision_loss_weight", 1.0),
@@ -215,6 +221,8 @@ def load_config(path: str | Path) -> ExperimentConfig:
         raise ValueError("training.phase3_early_stopping_min_delta must be non-negative.")
     if int(training_raw["phase3_validation_interval"]) < 1:
         raise ValueError("training.phase3_validation_interval must be at least 1.")
+    if not 0.0 < float(training_raw["phase3_validation_fraction"]) < 1.0:
+        raise ValueError("training.phase3_validation_fraction must be between 0 and 1.")
     if int(training_raw["joint_rounds"]) < 1:
         raise ValueError("training.joint_rounds must be at least 1.")
     if int(training_raw["joint_surrogate_epochs_per_round"]) < 1:

@@ -8,6 +8,7 @@ from _bootstrap import add_src_to_path
 add_src_to_path()
 
 import torch
+from torch.utils.data import DataLoader, Subset
 
 from dual_agent.config import TrainingConfig, load_config
 from dual_agent.models.dual_agent import DualAgentSystem
@@ -22,6 +23,7 @@ from dual_agent.training.dataset import (
 )
 from dual_agent.training.loops import (
     current_learning_rate,
+    disable_training_dropout,
     evaluate_forecaster_loss,
     evaluate_joint_loss,
     evaluate_surrogate_loss,
@@ -40,12 +42,24 @@ def main() -> None:
     parser.add_argument("--surrogate-checkpoint", default="surrogate.pt")
     parser.add_argument("--checkpoint", default="dual_agent.pt")
     parser.add_argument("--test-fraction", type=float, default=0.2)
+    parser.add_argument("--phase3-disable-dropout", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--forecaster-first", action=argparse.BooleanOptionalAction, default=None,
+                        help="Adapt the surrogate after each forecaster update.")
+    parser.add_argument("--validation-fraction", type=float, default=None,
+                        help="Fraction of the original training subset used for stage selection.")
     parser.add_argument("--swanlab", action="store_true", help="Track training metrics with SwanLab.")
     parser.add_argument("--swanlab-project", default="dual-agent-opf")
     parser.add_argument("--swanlab-experiment", default="joint")
     args = parser.parse_args()
 
     config = load_config(args.config)
+    disable_dropout = (config.training.phase3_disable_dropout
+                       if args.phase3_disable_dropout is None else args.phase3_disable_dropout)
+    forecaster_first = (config.training.phase3_forecaster_first
+                        if args.forecaster_first is None else args.forecaster_first)
+    validation_fraction = (config.training.phase3_validation_fraction
+                           if args.validation_fraction is None else args.validation_fraction)
+    torch.manual_seed(config.seed)
     data_path = args.data
     if data_path is None:
         parser.error("--data is required")
@@ -57,6 +71,15 @@ def main() -> None:
         test_fraction=args.test_fraction,
         seed=config.seed,
     )
+    if not 0 < validation_fraction < 1:
+        parser.error("--validation-fraction must be between zero and one")
+    original_ids = list(train_loader.dataset.indices)
+    order = torch.randperm(len(original_ids), generator=torch.Generator().manual_seed(20260922))
+    nval = max(1, int(len(original_ids) * validation_fraction))
+    validation_loader = DataLoader(Subset(dataset, [original_ids[i] for i in order[:nval]]),
+                                 batch_size=config.training.batch_size)
+    train_loader = DataLoader(Subset(dataset, [original_ids[i] for i in order[nval:]]),
+                              batch_size=config.training.batch_size, shuffle=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     nodes = dataset.pv_history.size(2)
     adjacency = make_complete_graph(nodes)
@@ -88,6 +111,8 @@ def main() -> None:
         forecaster.load_state_dict(torch.load(args.forecaster_checkpoint, map_location="cpu"))
 
     system = DualAgentSystem(forecaster, surrogate).to(device)
+    if disable_dropout:
+        disable_training_dropout(system)
     evaluator = TorchLinDistFlowEvaluator(
         config.network.dss_master,
         config.network.pv_systems,
@@ -115,6 +140,9 @@ def main() -> None:
             "surrogate_checkpoint": args.surrogate_checkpoint,
             "checkpoint": args.checkpoint,
             "test_fraction": args.test_fraction,
+            "validation_fraction_of_train": validation_fraction,
+            "phase3_disable_dropout": disable_dropout,
+            "forecaster_first": forecaster_first,
             "device": str(device),
             "initial_forecast_loss": initial_forecast_loss,
             "forecast_loss_cap": forecast_loss_cap,
@@ -157,12 +185,42 @@ def main() -> None:
     global_epoch = 0
     tracker_step = 0
     early_stopping_enabled = config.training.phase3_early_stopping_patience > 0
+    def validation_metrics():
+        return evaluate_joint_loss(system, evaluator, validation_loader, adjacency, device,
+            forecast_loss_cap, config.training.joint_forecast_constraint_weight,
+            config.training.joint_forecast_loss_weight, config.training.operating_cost_loss_weight,
+            config.training.voltage_violation_loss_weight, config.training.line_flow_violation_loss_weight,
+            config.training.kw_violation_loss_weight, config.training.soc_violation_loss_weight,
+            config.training.terminal_soc_loss_weight)
+
+    def snapshot(model, optimizer, scheduler):
+        return copy.deepcopy((model.state_dict(), optimizer.state_dict(),
+                              None if scheduler is None else scheduler.state_dict()))
+
+    def restore(state, model, optimizer, scheduler):
+        model.load_state_dict(state[0])
+        optimizer.load_state_dict(state[1])
+        if scheduler is not None and state[2] is not None:
+            scheduler.load_state_dict(state[2])
+
+    initial_pair_metrics = validation_metrics()
+    best_pair_score = initial_pair_metrics["lindistflow_loss"]
+    best_pair_cost = initial_pair_metrics["operating_cost"]
+    best_pair_state = copy.deepcopy(system.state_dict())
+    schedule = []
+    for r, nf in enumerate(forecaster_epochs_per_round, start=1):
+        ns = _joint_surrogate_epochs_for_round(config.training, r)
+        if forecaster_first and phase3_mode == "alternating":
+            schedule.extend([(r, nf, 0), (r, 0, ns)])
+        else:
+            schedule.append((r, nf, ns))
     try:
-        for round_index, forecaster_epochs in enumerate(forecaster_epochs_per_round, start=1):
-            surrogate_epochs = _joint_surrogate_epochs_for_round(config.training, round_index)
-            surrogate_best_operating_cost = float("inf")
+        for round_index, forecaster_epochs, surrogate_epochs in schedule:
+            surrogate_initial_metrics = validation_metrics()
+            surrogate_best_operating_cost = surrogate_initial_metrics["lindistflow_loss"]
+            surrogate_best_cost = surrogate_initial_metrics["operating_cost"]
             surrogate_bad_epochs = 0
-            surrogate_best_state = None
+            surrogate_best_state = snapshot(system.surrogate, surrogate_optimizer, surrogate_scheduler)
             surrogate_early_stopped = False
             forecaster_best_operating_cost = float("inf")
             forecaster_bad_epochs = 0
@@ -247,32 +305,47 @@ def main() -> None:
                     f"test_loss={surrogate_test_metrics['loss']:.6f}"
                 )
                 if early_stopping_enabled:
-                    validation_cost = surrogate_test_metrics["operating_cost"]
+                    validation = validation_metrics()
+                    validation_cost = validation["lindistflow_loss"]
                     if (
                         validation_cost
                         < surrogate_best_operating_cost
                         * (1.0 - config.training.phase3_early_stopping_min_delta)
+                        and validation["operating_cost"] < surrogate_best_cost
                     ):
                         surrogate_best_operating_cost = validation_cost
-                        surrogate_best_state = copy.deepcopy(system.surrogate.state_dict())
+                        surrogate_best_cost = validation["operating_cost"]
+                        surrogate_best_state = snapshot(system.surrogate, surrogate_optimizer, surrogate_scheduler)
                         surrogate_bad_epochs = 0
                     else:
                         surrogate_bad_epochs += 1
                     if surrogate_bad_epochs >= config.training.phase3_early_stopping_patience:
                         surrogate_early_stopped = True
                         if surrogate_best_state is not None:
-                            system.surrogate.load_state_dict(surrogate_best_state)
+                            restore(surrogate_best_state, system.surrogate, surrogate_optimizer, surrogate_scheduler)
                         print(
                             f"round={round_index:02d} stage=surrogate early_stop "
-                            f"best_operating_cost={surrogate_best_operating_cost:.6f}"
+                            f"best_validation_objective={surrogate_best_operating_cost:.6f}"
                         )
                         break
 
+            if early_stopping_enabled:
+                restore(surrogate_best_state, system.surrogate, surrogate_optimizer, surrogate_scheduler)
             if reference_surrogate is not None:
                 del reference_surrogate
 
             if forecaster_epochs == 0:
+                pair_metrics = validation_metrics()
+                if (pair_metrics["lindistflow_loss"] < best_pair_score
+                        and pair_metrics["operating_cost"] < best_pair_cost):
+                    best_pair_score = pair_metrics["lindistflow_loss"]
+                    best_pair_cost = pair_metrics["operating_cost"]
+                    best_pair_state = copy.deepcopy(system.state_dict())
                 continue
+            forecaster_initial_metrics = validation_metrics()
+            forecaster_best_operating_cost = forecaster_initial_metrics["lindistflow_loss"]
+            forecaster_best_cost = forecaster_initial_metrics["operating_cost"]
+            forecaster_best_state = snapshot(system.forecaster, forecaster_optimizer, forecaster_scheduler)
             print(
                 f"round={round_index:02d}/{active_rounds:02d} "
                 f"stage=forecaster epochs={forecaster_epochs}"
@@ -394,29 +467,42 @@ def main() -> None:
                     f"terminal_soc_deviation={test_metrics['terminal_soc_deviation']:.6f}"
                 )
                 if early_stopping_enabled:
-                    validation_cost = test_metrics["operating_cost"]
+                    validation = validation_metrics()
+                    validation_cost = validation["lindistflow_loss"]
                     if (
                         validation_cost
                         < forecaster_best_operating_cost
                         * (1.0 - config.training.phase3_early_stopping_min_delta)
+                        and validation["operating_cost"] < forecaster_best_cost
                     ):
                         forecaster_best_operating_cost = validation_cost
-                        forecaster_best_state = copy.deepcopy(system.forecaster.state_dict())
+                        forecaster_best_cost = validation["operating_cost"]
+                        forecaster_best_state = snapshot(system.forecaster, forecaster_optimizer, forecaster_scheduler)
                         forecaster_bad_epochs = 0
                     else:
                         forecaster_bad_epochs += 1
                     if forecaster_bad_epochs >= config.training.phase3_early_stopping_patience:
                         forecaster_early_stopped = True
                         if forecaster_best_state is not None:
-                            system.forecaster.load_state_dict(forecaster_best_state)
+                            restore(forecaster_best_state, system.forecaster, forecaster_optimizer, forecaster_scheduler)
                         print(
                             f"round={round_index:02d} stage=forecaster early_stop "
-                            f"best_operating_cost={forecaster_best_operating_cost:.6f}"
+                            f"best_validation_objective={forecaster_best_operating_cost:.6f}"
                         )
                         break
+            if early_stopping_enabled:
+                restore(forecaster_best_state, system.forecaster, forecaster_optimizer, forecaster_scheduler)
+            pair_metrics = validation_metrics()
+            if (pair_metrics["lindistflow_loss"] < best_pair_score
+                    and pair_metrics["operating_cost"] < best_pair_cost):
+                best_pair_score = pair_metrics["lindistflow_loss"]
+                best_pair_cost = pair_metrics["operating_cost"]
+                best_pair_state = copy.deepcopy(system.state_dict())
     finally:
         tracker.finish()
 
+    if early_stopping_enabled:
+        system.load_state_dict(best_pair_state)
     torch.save(system.state_dict(), args.checkpoint)
 
 

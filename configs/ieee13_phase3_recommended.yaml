@@ -121,3 +121,9 @@ training:
   phase3_early_stopping_min_delta: 0.001
 
   phase3_validation_interval: 10
+
+  phase3_disable_dropout: true
+
+  phase3_forecaster_first: true
+
+  phase3_validation_fraction: 0.2

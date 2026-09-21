@@ -23,7 +23,7 @@ network:
       phases: 3
       kv: 4.16
       kw_rated: 500.0
-      kwh_rated: 1000.0
+      kwh_rated: 2000.0
       soc_initial: 0.5
       soc_min: 0.1
       soc_max: 0.9
@@ -34,7 +34,7 @@ network:
       phases: 3
       kv: 4.16
       kw_rated: 500.0
-      kwh_rated: 1000.0
+      kwh_rated: 2000.0
       soc_initial: 0.5
       soc_min: 0.1
       soc_max: 0.9
@@ -92,15 +92,15 @@ model:
 training:
   batch_size: 256
   forecaster_epochs: 500
-  surrogate_epochs: 2000
+  surrogate_epochs: 1200
   phase3_mode: alternating
-  phase3_forecaster_epochs: 500
-  phase3_surrogate_epochs: 100
+  phase3_forecaster_epochs: 1500
+  phase3_surrogate_epochs: 1000
   phase3_rounds: 5
-  learning_rate: 0.0002
-  joint_learning_rate: 0.0002
-  joint_surrogate_learning_rate: 0.0002
-  warmup_epochs: 20
+  learning_rate: 0.00015
+  joint_learning_rate: 0.0001
+  joint_surrogate_learning_rate: 0.00001
+  warmup_epochs: 30
   min_learning_rate_ratio: 0.1
   max_grad_norm: 1.0
   joint_forecast_loss_tolerance: 0.2
@@ -111,3 +111,15 @@ training:
   kw_violation_loss_weight: 0
   soc_violation_loss_weight: 0
   terminal_soc_loss_weight: 200
+
+  phase3_disable_dropout: true
+
+  phase3_forecaster_first: true
+
+  phase3_validation_fraction: 0.2
+
+  phase3_early_stopping_patience: 50
+
+  phase3_early_stopping_min_delta: 0.001
+
+  phase3_validation_interval: 10
