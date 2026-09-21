@@ -1,0 +1,55 @@
+7 alternating 1 F selected 60 cost 1928.225 1866.936
+7 alternating 1 S selected 40 cost 1866.936 1860.173
+7 alternating 2 F selected 60 cost 1860.173 1832.301
+7 alternating 2 S selected 40 cost 1832.301 1825.258
+7 alternating 3 F selected 40 cost 1825.258 1815.37
+7 alternating 3 S selected 30 cost 1815.37 1809.741
+7 alternating 4 F selected 60 cost 1809.741 1805.936
+7 alternating 4 S selected 40 cost 1805.936 1801.059
+7 alternating 5 F selected 50 cost 1801.059 1797.473
+7 alternating 5 S selected 0 cost 1797.473 1797.473
+FINISHED 7 alternating {'operating_cost': 1858.7020263671875, 'voltage_violation': 0.0, 'line_flow_violation': 0.0, 'kw_violation': 0.0, 'soc_violation': 5.657595725239162e-09, 'terminal_soc_deviation': 0.18045006692409515, 'objective': 965.4410265684128}
+17 alternating 1 F selected 60 cost 1928.225 1868.62
+17 alternating 1 S selected 40 cost 1868.62 1859.431
+17 alternating 2 F selected 60 cost 1859.431 1832.434
+17 alternating 2 S selected 40 cost 1832.434 1823.604
+17 alternating 3 F selected 30 cost 1823.604 1820.089
+17 alternating 3 S selected 40 cost 1820.089 1814.758
+17 alternating 4 F selected 40 cost 1814.758 1809.609
+17 alternating 4 S selected 40 cost 1809.609 1804.698
+17 alternating 5 F selected 0 cost 1804.698 1804.698
+17 alternating 5 S selected 10 cost 1804.698 1803.412
+FINISHED 17 alternating {'operating_cost': 1864.6533203125, 'voltage_violation': 0.0, 'line_flow_violation': 0.0, 'kw_violation': 0.0, 'soc_violation': 7.081080610760182e-09, 'terminal_soc_deviation': 0.17036311328411102, 'objective': 966.3992828130722}
+27 alternating 1 F selected 60 cost 1928.225 1865.329
+27 alternating 1 S selected 40 cost 1865.329 1856.619
+27 alternating 2 F selected 60 cost 1856.619 1828.59
+27 alternating 2 S selected 30 cost 1828.59 1822.298
+27 alternating 3 F selected 50 cost 1822.298 1814.595
+27 alternating 3 S selected 40 cost 1814.595 1811.336
+27 alternating 4 F selected 60 cost 1811.336 1805.426
+27 alternating 4 S selected 20 cost 1805.426 1802.79
+27 alternating 5 F selected 50 cost 1802.79 1798.679
+27 alternating 5 S selected 0 cost 1798.679 1798.679
+FINISHED 27 alternating {'operating_cost': 1861.554931640625, 'voltage_violation': 0.0, 'line_flow_violation': 0.0, 'kw_violation': 0.0, 'soc_violation': 5.772685884863904e-09, 'terminal_soc_deviation': 0.17703817784786224, 'objective': 966.185101389885}
+37 alternating 1 F selected 60 cost 1928.225 1867.112
+37 alternating 1 S selected 40 cost 1867.112 1858.862
+37 alternating 2 F selected 60 cost 1858.862 1834.211
+37 alternating 2 S selected 40 cost 1834.211 1824.561
+37 alternating 3 F selected 50 cost 1824.561 1815.829
+37 alternating 3 S selected 30 cost 1815.829 1811.349
+37 alternating 4 F selected 30 cost 1811.349 1807.976
+37 alternating 4 S selected 40 cost 1807.976 1801.914
+37 alternating 5 F selected 50 cost 1801.914 1797.102
+37 alternating 5 S selected 30 cost 1797.102 1793.574
+FINISHED 37 alternating {'operating_cost': 1857.05517578125, 'voltage_violation': 0.0, 'line_flow_violation': 0.0, 'kw_violation': 0.0, 'soc_violation': 5.148775183982934e-09, 'terminal_soc_deviation': 0.1788933128118515, 'objective': 964.3062504529953}
+47 alternating 1 F selected 60 cost 1928.225 1867.177
+47 alternating 1 S selected 40 cost 1867.177 1861.011
+47 alternating 2 F selected 60 cost 1861.011 1836.065
+47 alternating 2 S selected 40 cost 1836.065 1826.336
+47 alternating 3 F selected 60 cost 1826.336 1812.736
+47 alternating 3 S selected 40 cost 1812.736 1805.315
+47 alternating 4 F selected 30 cost 1805.315 1800.803
+47 alternating 4 S selected 20 cost 1800.803 1798.637
+47 alternating 5 F selected 60 cost 1798.637 1791.881
+47 alternating 5 S selected 30 cost 1791.881 1790.404
+FINISHED 47 alternating {'operating_cost': 1856.7237548828125, 'voltage_violation': 0.0, 'line_flow_violation': 0.0, 'kw_violation': 0.0, 'soc_violation': 5.457701846012242e-09, 'terminal_soc_deviation': 0.18221041560173035, 'objective': 964.8039605617523}
