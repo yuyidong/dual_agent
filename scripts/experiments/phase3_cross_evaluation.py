@@ -124,6 +124,47 @@ def evaluate_pair(
     return {key: value / samples for key, value in totals.items()}
 
 
+@torch.inference_mode()
+def evaluate_forecaster_output_mmd(
+    forecaster: PVScenarioForecaster,
+    forecaster_states: list[dict[str, torch.Tensor]],
+    loader: Any,
+    adjacency: torch.Tensor,
+    device: torch.device,
+) -> list[float]:
+    """Measure each forecaster state's output shift from the initial state."""
+    def collect_outputs() -> torch.Tensor:
+        forecaster.eval()
+        chunks = []
+        for batch in loader:
+            batch = {key: value.to(device) for key, value in batch.items()}
+            output = forecaster(batch["pv_history"], adjacency)
+            chunks.append(output.reshape(output.shape[0], -1).cpu())
+        return torch.cat(chunks, dim=0)
+
+    def rbf_mmd(reference: torch.Tensor, current: torch.Tensor) -> float:
+        count = min(reference.shape[0], current.shape[0], 256)
+        reference = reference[:count].float()
+        current = current[:count].float()
+        merged = torch.cat([reference, current], dim=0)
+        distances = torch.cdist(merged, merged).pow(2)
+        positive = distances[distances > 0]
+        bandwidth = torch.median(positive).clamp_min(1e-6)
+        kernel = torch.exp(-distances / (2.0 * bandwidth))
+        xx = kernel[:count, :count]
+        yy = kernel[count:, count:]
+        xy = kernel[:count, count:]
+        return float((xx.mean() + yy.mean() - 2.0 * xy.mean()).clamp_min(0.0))
+
+    outputs = []
+    for state in forecaster_states:
+        forecaster.load_state_dict(state)
+        outputs.append(collect_outputs())
+    reference = outputs[0]
+    return [0.0 if index == 0 else rbf_mmd(reference, output)
+            for index, output in enumerate(outputs)]
+
+
 def save_matrix_csv(
     path: Path,
     raw_cost: np.ndarray,
@@ -167,11 +208,19 @@ def save_matrix_csv(
                 )
 
 
-def plot_cross_matrix(matrix: np.ndarray, output_path: Path) -> None:
+def plot_cross_matrix(
+    matrix: np.ndarray,
+    output_path: Path,
+    forecaster_mmd: list[float] | None = None,
+) -> None:
     plt.rcParams["font.family"] = "Noto Sans CJK SC"
     plt.rcParams["axes.unicode_minus"] = False
     size = matrix.shape[0]
-    labels = [f"$F_{{{index}}}$" for index in range(size)]
+    if forecaster_mmd is None:
+        labels = [f"$F_{{{index}}}$" for index in range(size)]
+    else:
+        labels = [f"$F_{{{index}}}$\n$D={forecaster_mmd[index]:.2f}$"
+                  for index in range(size)]
     row_labels = [f"$S_{{{index}}}$" for index in range(size)]
     fig, ax = plt.subplots(figsize=(12.2, 10.2), dpi=180)
     vmin = float(matrix.min())
@@ -179,14 +228,14 @@ def plot_cross_matrix(matrix: np.ndarray, output_path: Path) -> None:
     if np.isclose(vmin, vmax):
         vmax = vmin + 1e-3
     image = ax.imshow(matrix, cmap="YlGnBu", vmin=vmin, vmax=vmax, aspect="equal")
-    ax.set_xticks(np.arange(size), labels=labels, fontsize=18)
+    ax.set_xticks(np.arange(size), labels=labels, fontsize=15)
     ax.set_yticks(np.arange(size), labels=row_labels, fontsize=18)
-    ax.set_xlabel("Forecaster state", fontsize=21, labelpad=18)
+    ax.set_xlabel("Forecaster state (D: MMD from F0)", fontsize=18, labelpad=23)
     ax.set_ylabel("Surrogate state", fontsize=21, labelpad=22)
     ax.tick_params(length=0, pad=8)
     ax.set_title(
         "Iterative Decision Adaptation under Scenario Distribution Shift\nCross-Evaluation Matrix: Normalized Dispatch Cost",
-        fontsize=25, fontweight="bold", pad=28,
+        fontsize=22, fontweight="bold", pad=28,
     )
     ax.set_xticks(np.arange(-0.5, size, 1), minor=True)
     ax.set_yticks(np.arange(-0.5, size, 1), minor=True)
@@ -198,15 +247,33 @@ def plot_cross_matrix(matrix: np.ndarray, output_path: Path) -> None:
             color = "white" if matrix[i, j] >= midpoint else "#102a43"
             ax.text(j, i, f"{matrix[i, j]:.2f}", ha="center", va="center",
                     fontsize=17 if size <= 6 else 14, color=color)
+    for i in range(size):
+        ax.add_patch(
+            plt.Rectangle(
+                (i - 0.43, i - 0.43), 0.86, 0.86,
+                fill=False, edgecolor="#202020", linewidth=1.3, zorder=4,
+            )
+        )
+    for i in range(1, size):
+        ax.annotate(
+            "", xy=(i, i - 0.27), xytext=(i, i - 1 + 0.27),
+            arrowprops={"arrowstyle": "->", "color": "#202020", "lw": 1.4},
+            zorder=5,
+        )
     colorbar = fig.colorbar(image, ax=ax, fraction=0.045, pad=0.08)
     colorbar.set_label("Normalized dispatch cost (lower is better)", fontsize=16, labelpad=15)
     colorbar.ax.tick_params(labelsize=13)
     fig.text(
         0.5, 0.035,
-        "All combinations use the (S0, F0) test-set operating cost as a common baseline.",
-        ha="center", fontsize=14,
+        "Diagonal: matched pair (Si, Fi); arrows: fixed Fi, update S(i-1) -> Si.",
+        ha="center", fontsize=12,
     )
-    fig.subplots_adjust(left=0.15, right=0.86, top=0.82, bottom=0.16)
+    fig.text(
+        0.5, 0.012,
+        "All values are normalized by the (S0, F0) test-set operating cost.",
+        ha="center", fontsize=11,
+    )
+    fig.subplots_adjust(left=0.15, right=0.86, top=0.79, bottom=0.18)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
@@ -484,6 +551,10 @@ def main() -> None:
             raw_cost[i, j] = metrics["operating_cost"]
         print(f"S{i}: " + " ".join(f"{raw_cost[i, j]:.3f}" for j in range(rounds + 1)))
 
+    forecaster_mmd = evaluate_forecaster_output_mmd(
+        forecaster, forecaster_states, test_loader, adjacency, device
+    )
+    print("forecaster_output_mmd=" + " ".join(f"{value:.6f}" for value in forecaster_mmd))
     baseline_cost = float(raw_cost[0, 0])
     normalized_cost = raw_cost / baseline_cost
     output_dir = Path(args.output_dir)
@@ -493,8 +564,8 @@ def main() -> None:
     csv_path = output_dir / "phase3_cross_evaluation_matrix.csv"
     json_path = output_dir / "phase3_cross_evaluation_summary.json"
     npz_path = output_dir / "phase3_cross_evaluation_matrix.npz"
-    plot_cross_matrix(normalized_cost, matrix_path)
-    plot_cross_matrix(normalized_cost, svg_path)
+    plot_cross_matrix(normalized_cost, matrix_path, forecaster_mmd)
+    plot_cross_matrix(normalized_cost, svg_path, forecaster_mmd)
     save_matrix_csv(csv_path, raw_cost, normalized_cost, pair_metrics)
 
     diagonal = np.diag(normalized_cost)
@@ -514,6 +585,7 @@ def main() -> None:
         "raw_operating_cost": raw_cost.tolist(),
         "normalized_operating_cost": normalized_cost.tolist(),
         "diagonal_normalized_cost": diagonal.tolist(),
+        "forecaster_output_mmd_from_F0": forecaster_mmd,
         "fixed_S0_relative_change_at_last_forecaster": float(fixed_s0_change),
         "matched_pair_relative_change_from_initial": float(matched_change),
         "round_records": round_records,
@@ -536,4 +608,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

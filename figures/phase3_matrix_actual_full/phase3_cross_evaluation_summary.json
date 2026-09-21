@@ -1,0 +1,257 @@
+{
+  "experiment": "phase3_cross_evaluation_iterative_adaptation",
+  "config": "configs/ieee13.yaml",
+  "data": "data/ieee13.npz",
+  "device": "cuda",
+  "seed": 7,
+  "test_fraction": 0.2,
+  "rounds": 5,
+  "state_labels": {
+    "forecast": [
+      "F0",
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5"
+    ],
+    "surrogate": [
+      "S0",
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5"
+    ]
+  },
+  "definition": "E[i,j] is the test-set operating cost of surrogate S_i with forecaster F_j; all normalized values divide by E[0,0].",
+  "baseline_operating_cost": 1983.017578125,
+  "raw_operating_cost": [
+    [
+      1983.017578125,
+      1870.70458984375,
+      1909.3607177734375,
+      2098.83544921875,
+      2045.7237548828125,
+      2090.634033203125
+    ],
+    [
+      2022.0531005859375,
+      1871.5670166015625,
+      1904.0555419921875,
+      1993.632568359375,
+      1982.5771484375,
+      2004.939453125
+    ],
+    [
+      2092.384033203125,
+      1932.94482421875,
+      1861.6317138671875,
+      1875.7677001953125,
+      1932.6868896484375,
+      1941.432373046875
+    ],
+    [
+      2088.059814453125,
+      1950.7994384765625,
+      1918.6519775390625,
+      1874.3583984375,
+      1897.2777099609375,
+      1898.7476806640625
+    ],
+    [
+      2115.26025390625,
+      1988.9412841796875,
+      1971.90380859375,
+      1924.0274658203125,
+      1886.0196533203125,
+      1885.0228271484375
+    ],
+    [
+      2140.77490234375,
+      2013.6287841796875,
+      2002.944091796875,
+      1951.6121826171875,
+      1902.4122314453125,
+      1882.98046875
+    ]
+  ],
+  "normalized_operating_cost": [
+    [
+      1.0,
+      0.943362585626979,
+      0.9628561737605941,
+      1.0584048635631658,
+      1.0316215940037723,
+      1.0542690373828554
+    ],
+    [
+      1.0196849099531669,
+      0.9437974918866745,
+      0.9601808692954333,
+      1.0053529481288874,
+      0.9997778992519489,
+      1.011054806191243
+    ],
+    [
+      1.055151530820788,
+      0.9747492132905876,
+      0.9387872979055555,
+      0.9459158208617116,
+      0.9746191415387494,
+      0.9790293310877027
+    ],
+    [
+      1.0529709052944682,
+      0.9837529732444931,
+      0.9675415884881883,
+      0.9452051354026623,
+      0.9567629308434411,
+      0.9575042105574187
+    ],
+    [
+      1.0666875963380462,
+      1.0029872181265729,
+      0.9943955264674162,
+      0.9702523502789802,
+      0.9510856959238849,
+      0.9505830144636341
+    ],
+    [
+      1.079554173376473,
+      1.015436679125977,
+      1.0100485814607434,
+      0.98416282545639,
+      0.9593521774245177,
+      0.9495530899581899
+    ]
+  ],
+  "diagonal_normalized_cost": [
+    1.0,
+    0.9437974918866745,
+    0.9387872979055555,
+    0.9452051354026623,
+    0.9510856959238849,
+    0.9495530899581899
+  ],
+  "forecaster_output_mmd_from_F0": [
+    0.0,
+    0.5484641790390015,
+    0.6581661701202393,
+    0.6315231919288635,
+    0.5435180068016052,
+    0.5612126588821411
+  ],
+  "fixed_S0_relative_change_at_last_forecaster": 0.05426903738285538,
+  "matched_pair_relative_change_from_initial": -0.05044691004181012,
+  "round_records": [
+    {
+      "stage": 0,
+      "forecaster_epochs": 0,
+      "surrogate_epochs": 0,
+      "forecast_loss_cap": 406.88021571120936
+    },
+    {
+      "stage": 1,
+      "forecaster_epochs": 300,
+      "surrogate_epochs": 110,
+      "requested_forecaster_epochs": 300,
+      "requested_surrogate_epochs": 200,
+      "surrogate_early_stopped": true,
+      "forecaster_early_stopped": false,
+      "surrogate_best_validation_operating_cost": 2022.0531005859375,
+      "forecaster_best_validation_operating_cost": 1871.5670166015625,
+      "elapsed_seconds": 83.64876413345337,
+      "forecaster_learning_rate": 9.271396428346635e-05,
+      "surrogate_learning_rate": 9.849793881177902e-06,
+      "surrogate_train_loss": 977.067615476429,
+      "surrogate_train_operating_cost": 1907.7089302705758,
+      "forecaster_train_loss": 938.2718970143897,
+      "forecaster_train_forecast_loss": 401.45007886874953,
+      "forecaster_train_operating_cost": 1805.5087228851878
+    },
+    {
+      "stage": 2,
+      "forecaster_epochs": 280,
+      "surrogate_epochs": 80,
+      "requested_forecaster_epochs": 300,
+      "requested_surrogate_epochs": 200,
+      "surrogate_early_stopped": true,
+      "forecaster_early_stopped": true,
+      "surrogate_best_validation_operating_cost": 1932.94482421875,
+      "forecaster_best_validation_operating_cost": 1861.6317138671875,
+      "elapsed_seconds": 75.36433219909668,
+      "forecaster_learning_rate": 7.233175873756409e-05,
+      "surrogate_learning_rate": 9.409202694892884e-06,
+      "surrogate_train_loss": 944.8562436505551,
+      "surrogate_train_operating_cost": 1820.0498620709802,
+      "forecaster_train_loss": 935.2261828747424,
+      "forecaster_train_forecast_loss": 404.19906213781337,
+      "forecaster_train_operating_cost": 1793.1526460193452
+    },
+    {
+      "stage": 3,
+      "forecaster_epochs": 110,
+      "surrogate_epochs": 90,
+      "requested_forecaster_epochs": 300,
+      "requested_surrogate_epochs": 200,
+      "surrogate_early_stopped": true,
+      "forecaster_early_stopped": true,
+      "surrogate_best_validation_operating_cost": 1918.6519775390625,
+      "forecaster_best_validation_operating_cost": 1874.3583984375,
+      "elapsed_seconds": 37.116403579711914,
+      "forecaster_learning_rate": 6.218199416995049e-05,
+      "surrogate_learning_rate": 8.603757053613663e-06,
+      "surrogate_train_loss": 941.9633641504979,
+      "surrogate_train_operating_cost": 1807.9782898172791,
+      "forecaster_train_loss": 945.775878459106,
+      "forecaster_train_forecast_loss": 425.66537803491536,
+      "forecaster_train_operating_cost": 1803.491678799174
+    },
+    {
+      "stage": 4,
+      "forecaster_epochs": 220,
+      "surrogate_epochs": 150,
+      "requested_forecaster_epochs": 300,
+      "requested_surrogate_epochs": 200,
+      "surrogate_early_stopped": true,
+      "forecaster_early_stopped": true,
+      "surrogate_best_validation_operating_cost": 1924.0274658203125,
+      "forecaster_best_validation_operating_cost": 1886.0196533203125,
+      "elapsed_seconds": 70.35986638069153,
+      "forecaster_learning_rate": 4.1277291625738143e-05,
+      "surrogate_learning_rate": 6.7232356369495396e-06,
+      "surrogate_train_loss": 941.9169247432798,
+      "surrogate_train_operating_cost": 1809.0934846945588,
+      "forecaster_train_loss": 951.5862580277253,
+      "forecaster_train_forecast_loss": 420.25042318453575,
+      "forecaster_train_operating_cost": 1816.4986226474264
+    },
+    {
+      "stage": 5,
+      "forecaster_epochs": 140,
+      "surrogate_epochs": 80,
+      "requested_forecaster_epochs": 300,
+      "requested_surrogate_epochs": 200,
+      "surrogate_early_stopped": true,
+      "forecaster_early_stopped": true,
+      "surrogate_best_validation_operating_cost": 1902.4122314453125,
+      "forecaster_best_validation_operating_cost": 1882.98046875,
+      "elapsed_seconds": 42.77725839614868,
+      "forecaster_learning_rate": 2.925474971532822e-05,
+      "surrogate_learning_rate": 5.572869022376836e-06,
+      "surrogate_train_loss": 945.9211512229091,
+      "surrogate_train_operating_cost": 1813.666028145032,
+      "forecaster_train_loss": 950.7864238287212,
+      "forecaster_train_forecast_loss": 417.5279194106404,
+      "forecaster_train_operating_cost": 1814.5335712735616
+    }
+  ],
+  "elapsed_seconds": 311.2765598297119,
+  "outputs": {
+    "png": "figures/phase3_matrix_actual_full/phase3_cross_evaluation_matrix.png",
+    "svg": "figures/phase3_matrix_actual_full/phase3_cross_evaluation_matrix.svg",
+    "csv": "figures/phase3_matrix_actual_full/phase3_cross_evaluation_matrix.csv",
+    "npz": "figures/phase3_matrix_actual_full/phase3_cross_evaluation_matrix.npz"
+  }
+}

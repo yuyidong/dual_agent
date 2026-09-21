@@ -1,0 +1,28 @@
+device=cuda
+dataset=data/ieee13.npz train=819 test=205 batch_size=256
+cross_states=6 total_forecaster_epochs=1500 total_surrogate_epochs=1000
+initial_train_forecast_loss=339.066846
+stage=1 surrogate_epochs=110/200 forecaster_epochs=300/300 surrogate_best=2022.053 forecaster_best=1871.567 early_stop=(True,False) elapsed=83.6s
+stage=2 surrogate_epochs=80/200 forecaster_epochs=280/300 surrogate_best=1932.945 forecaster_best=1861.632 early_stop=(True,True) elapsed=75.4s
+stage=3 surrogate_epochs=90/200 forecaster_epochs=110/300 surrogate_best=1918.652 forecaster_best=1874.358 early_stop=(True,True) elapsed=37.1s
+stage=4 surrogate_epochs=150/200 forecaster_epochs=220/300 surrogate_best=1924.027 forecaster_best=1886.020 early_stop=(True,True) elapsed=70.4s
+stage=5 surrogate_epochs=80/200 forecaster_epochs=140/300 surrogate_best=1902.412 forecaster_best=1882.980 early_stop=(True,True) elapsed=42.8s
+evaluating cross combinations...
+S0: 1983.018 1870.705 1909.361 2098.835 2045.724 2090.634
+S1: 2022.053 1871.567 1904.056 1993.633 1982.577 2004.939
+S2: 2092.384 1932.945 1861.632 1875.768 1932.687 1941.432
+S3: 2088.060 1950.799 1918.652 1874.358 1897.278 1898.748
+S4: 2115.260 1988.941 1971.904 1924.027 1886.020 1885.023
+S5: 2140.775 2013.629 2002.944 1951.612 1902.412 1882.980
+forecaster_output_mmd=0.000000 0.548464 0.658166 0.631523 0.543518 0.561213
+normalized matrix:
+1.0000 0.9434 0.9629 1.0584 1.0316 1.0543
+1.0197 0.9438 0.9602 1.0054 0.9998 1.0111
+1.0552 0.9747 0.9388 0.9459 0.9746 0.9790
+1.0530 0.9838 0.9675 0.9452 0.9568 0.9575
+1.0667 1.0030 0.9944 0.9703 0.9511 0.9506
+1.0796 1.0154 1.0100 0.9842 0.9594 0.9496
+baseline_operating_cost=1983.017578
+fixed_S0_last_relative_change=+5.4269%
+matched_last_relative_change=-5.0447%
+outputs=/home/ubuntu/MyProject/Dual_Agent/dual_agent/figures/phase3_matrix_actual_full
