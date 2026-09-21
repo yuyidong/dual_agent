@@ -12,7 +12,6 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from matplotlib.patches import Rectangle
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -181,11 +180,11 @@ def plot_cross_matrix(matrix: np.ndarray, output_path: Path) -> None:
     image = ax.imshow(matrix, cmap="YlGnBu", vmin=vmin, vmax=vmax, aspect="equal")
     ax.set_xticks(np.arange(size), labels=labels, fontsize=18)
     ax.set_yticks(np.arange(size), labels=row_labels, fontsize=18)
-    ax.set_xlabel("预测体参数状态", fontsize=21, labelpad=18)
-    ax.set_ylabel("决策体参数状态", fontsize=21, labelpad=22)
+    ax.set_xlabel("Forecaster state", fontsize=21, labelpad=18)
+    ax.set_ylabel("Surrogate state", fontsize=21, labelpad=22)
     ax.tick_params(length=0, pad=8)
     ax.set_title(
-        "场景分布漂移下的决策体迭代适应性验证\n交叉评估矩阵：归一化调度成本",
+        "Iterative Decision Adaptation under Scenario Distribution Shift\nCross-Evaluation Matrix: Normalized Dispatch Cost",
         fontsize=25, fontweight="bold", pad=28,
     )
     ax.set_xticks(np.arange(-0.5, size, 1), minor=True)
@@ -198,27 +197,13 @@ def plot_cross_matrix(matrix: np.ndarray, output_path: Path) -> None:
             color = "white" if matrix[i, j] >= midpoint else "#102a43"
             ax.text(j, i, f"{matrix[i, j]:.2f}", ha="center", va="center",
                     fontsize=17 if size <= 6 else 14, color=color)
-    ax.add_patch(Rectangle(
-        (-0.48, -0.48), size - 0.04, 0.96, fill=False,
-        edgecolor="#ef4444", linewidth=3.8, zorder=5,
-    ))
-    for index in range(size):
-        ax.add_patch(Rectangle(
-            (index - 0.36, index - 0.36), 0.72, 0.72, fill=False,
-            edgecolor="#087f5b", linewidth=3.6, zorder=6,
-        ))
     colorbar = fig.colorbar(image, ax=ax, fraction=0.045, pad=0.08)
-    colorbar.set_label("归一化调度成本（越高越差）", fontsize=16, labelpad=15)
+    colorbar.set_label("Normalized dispatch cost (lower is better)", fontsize=16, labelpad=15)
     colorbar.ax.tick_params(labelsize=13)
     fig.text(
         0.5, 0.035,
-        "颜色越深表示成本越高；所有组合均以初始组合 (S0, F0) 的测试集 operating cost 为共同基准。",
+        "All combinations use the (S0, F0) test-set operating cost as a common baseline.",
         ha="center", fontsize=14,
-    )
-    fig.text(
-        0.5, 0.010,
-        "红框：固定初始决策体 S0；绿框：同一迭代阶段的匹配组合 (Si, Fi)。",
-        ha="center", fontsize=14, color="#444444",
     )
     fig.subplots_adjust(left=0.15, right=0.86, top=0.82, bottom=0.16)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
