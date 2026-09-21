@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from dual_agent.config import BatteryConfig, TeacherConfig
+from dual_agent.config import BatteryConfig, LinDistFlowConfig
 
 
 @dataclass(frozen=True)
@@ -84,17 +84,17 @@ class OpenDSS13Runner:
         pv_kw: np.ndarray,
         battery_kw: float,
         soc: float,
-        teacher: TeacherConfig,
+        lindistflow: LinDistFlowConfig,
     ) -> PowerFlowResult:
         self.set_pv_kw(pv_kw)
         self.set_battery_kw(battery_kw, soc)
         self.dss.Solution.Solve()
 
-        voltages = np.asarray(self.dss.Circuit.AllBusVmagPu(), dtype=float)
+        voltages = np.asarray(self.dss.Circuit.AllBusMagPu(), dtype=float)
         voltage_min = float(np.min(voltages))
         voltage_max = float(np.max(voltages))
-        low = np.maximum(teacher.voltage_lower - voltages, 0.0)
-        high = np.maximum(voltages - teacher.voltage_upper, 0.0)
+        low = np.maximum(lindistflow.voltage_lower - voltages, 0.0)
+        high = np.maximum(voltages - lindistflow.voltage_upper, 0.0)
         voltage_violation = float(np.mean(low**2 + high**2))
 
         thermal_violation = 0.0

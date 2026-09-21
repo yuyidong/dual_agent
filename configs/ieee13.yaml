@@ -17,49 +17,97 @@ network:
     - 611
     - 652
     - 680
-  battery:
-    name: bat_675
-    bus: "675.1.2.3"
-    phases: 3
-    kv: 4.16
-    kw_rated: 500.0
-    kwh_rated: 1000.0
-    soc_initial: 0.5
-    soc_min: 0.1
-    soc_max: 0.9
-    charge_efficiency: 0.95
-    discharge_efficiency: 0.95
+  batteries:
+    - name: bat_675
+      bus: "675.1.2.3"
+      phases: 3
+      kv: 4.16
+      kw_rated: 500.0
+      kwh_rated: 1000.0
+      soc_initial: 0.5
+      soc_min: 0.1
+      soc_max: 0.9
+      charge_efficiency: 0.95
+      discharge_efficiency: 0.95
+    - name: bat_680
+      bus: "680.1.2.3"
+      phases: 3
+      kv: 4.16
+      kw_rated: 500.0
+      kwh_rated: 1000.0
+      soc_initial: 0.5
+      soc_min: 0.1
+      soc_max: 0.9
+      charge_efficiency: 0.95
+      discharge_efficiency: 0.95
 
 problem:
-  history_steps: 12
+  samples: 1024
+  history_steps: 48
   horizon_steps: 24
-  scenarios: 8
-  interval_hours: 0.25
+  scenarios: 20
+  generate_dataset_scenarios: false
+  interval_hours: 1
   pv_feature_dim: 6
   load_feature_dim: 2
 
-teacher:
-  candidates: 64
-  elite_fraction: 0.2
-  cem_iterations: 3
+lindistflow:
   voltage_lower: 0.95
   voltage_upper: 1.05
-  energy_price_per_kwh: 0.12
+  energy_price_profile_per_kwh:
+    - 0.08
+    - 0.08
+    - 0.08
+    - 0.08
+    - 0.08
+    - 0.08
+    - 0.10
+    - 0.12
+    - 0.14
+    - 0.14
+    - 0.14
+    - 0.14
+    - 0.14
+    - 0.14
+    - 0.16
+    - 0.18
+    - 0.28
+    - 0.32
+    - 0.32
+    - 0.30
+    - 0.26
+    - 0.18
+    - 0.12
+    - 0.10
   degradation_per_kwh: 0.02
-  curtailment_per_kwh: 0.04
-  voltage_violation_weight: 2000.0
+  curtailment_per_kwh: 1
+  terminal_soc_tolerance: 0.05
 
 model:
-  hidden_dim: 96
+  hidden_dim: 128
   graph_layers: 2
   temporal_layers: 2
   dropout: 0.1
 
 training:
-  batch_size: 32
-  epochs: 20
-  learning_rate: 0.001
-  forecast_loss_weight: 1.0
-  decision_loss_weight: 0.2
-  risk_loss_weight: 0.1
-
+  batch_size: 256
+  forecaster_epochs: 500
+  surrogate_epochs: 2000
+  phase3_mode: alternating
+  phase3_forecaster_epochs: 500
+  phase3_surrogate_epochs: 100
+  phase3_rounds: 5
+  learning_rate: 0.0002
+  joint_learning_rate: 0.0002
+  joint_surrogate_learning_rate: 0.0002
+  warmup_epochs: 20
+  min_learning_rate_ratio: 0.1
+  max_grad_norm: 1.0
+  joint_forecast_loss_tolerance: 0.2
+  joint_forecast_constraint_weight: 0.2
+  operating_cost_loss_weight: 0.5
+  voltage_violation_loss_weight: 10
+  line_flow_violation_loss_weight: 10
+  kw_violation_loss_weight: 0
+  soc_violation_loss_weight: 0
+  terminal_soc_loss_weight: 200

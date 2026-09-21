@@ -9,3 +9,7 @@ runs/
 outputs/
 *.pt
 *.pth
+# Local experiment and proofreading artifacts
+swanlog/
+tmp/
+*.swanlab

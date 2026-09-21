@@ -3,15 +3,16 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+from dual_agent.config import BatteryConfig
 from dual_agent.models.graph import GraphConv, normalize_adjacency
 
 
 class OPFSurrogate(nn.Module):
-    """Differentiable neural surrogate for multi-step stochastic OPF.
+    """Dispatch network used before the differentiable LinDistFlow layer.
 
-    The surrogate maps PV/load scenarios and grid context to OPF labels:
-    dispatch, expected cost, and network risk. It is intentionally lightweight
-    enough to sit in the inner loop of decision-focused forecaster training.
+    The surrogate maps PV/load scenarios and grid context to battery dispatch.
+    Surrogate training feeds that dispatch into a Torch LinDistFlow evaluator
+    and optimizes the resulting operating cost and violation penalties.
     """
 
     def __init__(
@@ -25,14 +26,50 @@ class OPFSurrogate(nn.Module):
         graph_layers: int = 2,
         temporal_layers: int = 2,
         dropout: float = 0.1,
-        battery_count: int = 1,
+        battery_count: int | None = None,
+        battery: BatteryConfig | tuple[BatteryConfig, ...] | None = None,
+        interval_hours: float | None = None,
     ) -> None:
         super().__init__()
+        batteries = _as_battery_tuple(battery)
+        if battery_count is None:
+            battery_count = len(batteries) if batteries else 1
         self.pv_nodes = pv_nodes
         self.load_nodes = load_nodes
         self.horizon_steps = horizon_steps
         self.scenarios = scenarios
         self.battery_count = battery_count
+        self.interval_hours = interval_hours
+        self.battery_feasibility_enabled = bool(batteries) and interval_hours is not None
+        if self.battery_feasibility_enabled and battery_count != len(batteries):
+            raise ValueError("battery_count must match the number of configured batteries.")
+        if self.battery_feasibility_enabled and interval_hours <= 0:
+            raise ValueError("interval_hours must be positive when battery feasibility projection is enabled.")
+
+        if batteries:
+            self.register_buffer("kw_rated", torch.tensor([item.kw_rated for item in batteries], dtype=torch.float32))
+            self.register_buffer("kwh_rated", torch.tensor([item.kwh_rated for item in batteries], dtype=torch.float32))
+            self.register_buffer(
+                "soc_initial", torch.tensor([item.soc_initial for item in batteries], dtype=torch.float32)
+            )
+            self.register_buffer("soc_min", torch.tensor([item.soc_min for item in batteries], dtype=torch.float32))
+            self.register_buffer("soc_max", torch.tensor([item.soc_max for item in batteries], dtype=torch.float32))
+            self.register_buffer(
+                "charge_efficiency", torch.tensor([item.charge_efficiency for item in batteries], dtype=torch.float32)
+            )
+            self.register_buffer(
+                "discharge_efficiency",
+                torch.tensor([item.discharge_efficiency for item in batteries], dtype=torch.float32),
+            )
+        else:
+            self.kw_rated = None
+            self.kwh_rated = None
+            self.soc_initial = None
+            self.soc_min = None
+            self.soc_max = None
+            self.charge_efficiency = None
+            self.discharge_efficiency = None
+        self.projection_soc_margin = 0.0
 
         # Per node/time features are scenario mean, scenario std, and load features.
         input_dim = 2 + load_feature_dim
@@ -80,28 +117,142 @@ class OPFSurrogate(nn.Module):
         pooled_nodes = x.mean(dim=2)
         encoded = self.temporal_encoder(pooled_nodes)
 
-        dispatch = self.dispatch_head(encoded)
+        raw_dispatch = self.dispatch_head(encoded)
+        dispatch = self._project_battery_feasible_dispatch(raw_dispatch)
         summary = encoded.mean(dim=1)
         cost = torch.nn.functional.softplus(self.cost_head(summary)).squeeze(-1)
         risk = torch.nn.functional.softplus(self.risk_head(summary))
         return {
             "dispatch": dispatch,
+            "raw_dispatch": raw_dispatch,
             "cost": cost,
             "voltage_risk": risk[:, 0],
             "thermal_risk": risk[:, 1],
         }
 
+    def _project_battery_feasible_dispatch(self, raw_dispatch: torch.Tensor) -> torch.Tensor:
+        if not self.battery_feasibility_enabled:
+            return raw_dispatch
+        if raw_dispatch.ndim != 3 or raw_dispatch.size(-1) != self.battery_count:
+            raise ValueError("Battery feasible dispatch projection expects shape [batch, horizon, batteries].")
 
-def surrogate_supervised_loss(
-    prediction: dict[str, torch.Tensor],
-    target_dispatch: torch.Tensor,
-    target_cost: torch.Tensor,
-    target_voltage_risk: torch.Tensor,
-    target_thermal_risk: torch.Tensor,
-) -> torch.Tensor:
-    dispatch_loss = torch.nn.functional.mse_loss(prediction["dispatch"], target_dispatch)
-    cost_loss = torch.nn.functional.mse_loss(prediction["cost"], target_cost)
-    voltage_loss = torch.nn.functional.mse_loss(prediction["voltage_risk"], target_voltage_risk)
-    thermal_loss = torch.nn.functional.mse_loss(prediction["thermal_risk"], target_thermal_risk)
-    return dispatch_loss + cost_loss + 0.5 * voltage_loss + 0.5 * thermal_loss
+        assert self.interval_hours is not None
+        assert self.kw_rated is not None
+        assert self.kwh_rated is not None
+        assert self.soc_initial is not None
+        assert self.soc_min is not None
+        assert self.soc_max is not None
+        assert self.charge_efficiency is not None
+        assert self.discharge_efficiency is not None
 
+        soc_lower, soc_upper = self._projection_soc_bounds()
+        desired_dispatch = self.kw_rated[None, None, :] * torch.tanh(raw_dispatch)
+        dispatch = self._project_dispatch_kw(desired_dispatch, soc_lower, soc_upper)
+        corrected_dispatch = self._apply_terminal_soc_correction(dispatch)
+        return self._project_dispatch_kw(corrected_dispatch, soc_lower, soc_upper)
+
+    def _projection_soc_bounds(self) -> tuple[torch.Tensor, torch.Tensor]:
+        assert self.soc_initial is not None
+        assert self.soc_min is not None
+        assert self.soc_max is not None
+
+        lower = self.soc_min + self.projection_soc_margin
+        upper = self.soc_max - self.projection_soc_margin
+        valid_margin = (lower < self.soc_initial) & (self.soc_initial < upper)
+        return torch.where(valid_margin, lower, self.soc_min), torch.where(valid_margin, upper, self.soc_max)
+
+    def _project_dispatch_kw(
+        self,
+        desired_dispatch_kw: torch.Tensor,
+        soc_lower: torch.Tensor,
+        soc_upper: torch.Tensor,
+    ) -> torch.Tensor:
+        assert self.interval_hours is not None
+        assert self.kw_rated is not None
+        assert self.kwh_rated is not None
+        assert self.soc_initial is not None
+        assert self.charge_efficiency is not None
+        assert self.discharge_efficiency is not None
+
+        dispatch_steps = []
+        soc = self.soc_initial[None, :].expand(desired_dispatch_kw.size(0), -1)
+        kw_rated = self.kw_rated[None, :]
+        for step in range(desired_dispatch_kw.size(1)):
+            max_discharge_kw = torch.minimum(
+                kw_rated,
+                torch.relu(soc - soc_lower)
+                * self.kwh_rated[None, :]
+                * self.discharge_efficiency[None, :]
+                / self.interval_hours,
+            )
+            max_charge_kw = torch.minimum(
+                kw_rated,
+                torch.relu(soc_upper - soc)
+                * self.kwh_rated[None, :]
+                / (self.charge_efficiency[None, :] * self.interval_hours),
+            )
+            requested_dispatch_kw = desired_dispatch_kw[:, step, :]
+            dispatch_kw = torch.minimum(torch.relu(requested_dispatch_kw), max_discharge_kw) - torch.minimum(
+                torch.relu(-requested_dispatch_kw),
+                max_charge_kw,
+            )
+            discharge_kw = torch.relu(dispatch_kw)
+            charge_kw = torch.relu(-dispatch_kw)
+            soc = soc - (
+                self.interval_hours * discharge_kw / (self.kwh_rated[None, :] * self.discharge_efficiency[None, :])
+            ) + (self.interval_hours * self.charge_efficiency[None, :] * charge_kw / self.kwh_rated[None, :])
+            dispatch_steps.append(dispatch_kw)
+        return torch.stack(dispatch_steps, dim=1)
+
+    def _apply_terminal_soc_correction(self, dispatch_kw: torch.Tensor) -> torch.Tensor:
+        assert self.interval_hours is not None
+        assert self.kwh_rated is not None
+        assert self.soc_initial is not None
+        assert self.charge_efficiency is not None
+        assert self.discharge_efficiency is not None
+
+        final_soc = self._final_soc(dispatch_kw)
+        soc_gap = self.soc_initial - final_soc
+        horizon = dispatch_kw.size(1)
+        discharge_correction_kw = (
+            torch.relu(-soc_gap)
+            * self.kwh_rated[None, :]
+            * self.discharge_efficiency[None, :]
+            / (self.interval_hours * horizon)
+        )
+        charge_correction_kw = (
+            torch.relu(soc_gap)
+            * self.kwh_rated[None, :]
+            / (self.charge_efficiency[None, :] * self.interval_hours * horizon)
+        )
+        correction_kw = discharge_correction_kw - charge_correction_kw
+        return dispatch_kw + correction_kw[:, None, :]
+
+    def _final_soc(self, dispatch_kw: torch.Tensor) -> torch.Tensor:
+        assert self.interval_hours is not None
+        assert self.kwh_rated is not None
+        assert self.soc_initial is not None
+        assert self.charge_efficiency is not None
+        assert self.discharge_efficiency is not None
+
+        discharge_kw = torch.relu(dispatch_kw)
+        charge_kw = torch.relu(-dispatch_kw)
+        soc_delta = -(
+            self.interval_hours
+            * discharge_kw
+            / (self.kwh_rated[None, None, :] * self.discharge_efficiency[None, None, :])
+        ) + (
+            self.interval_hours
+            * self.charge_efficiency[None, None, :]
+            * charge_kw
+            / self.kwh_rated[None, None, :]
+        )
+        return self.soc_initial[None, :] + soc_delta.sum(dim=1)
+
+
+def _as_battery_tuple(battery: BatteryConfig | tuple[BatteryConfig, ...] | None) -> tuple[BatteryConfig, ...]:
+    if battery is None:
+        return ()
+    if isinstance(battery, BatteryConfig):
+        return (battery,)
+    return tuple(battery)
