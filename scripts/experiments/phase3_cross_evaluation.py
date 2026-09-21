@@ -231,13 +231,13 @@ def plot_cross_matrix(
         labels = [f"$F_{{{index}}}$" for index in range(size)]
     elif mmd_reference == "adjacent":
         labels = [f"$F_{{{index}}}$" if index == 0 else
-                  f"$F_{{{index}}}$\n$\\Delta D_{{{index}}}={forecaster_mmd[index]:.2f}$"
+                  f"$F_{{{index}}}$\n$D={forecaster_mmd[index]:.2f}$"
                   for index in range(size)]
     else:
         labels = [f"$F_{{{index}}}$\n$D={forecaster_mmd[index]:.2f}$"
                   for index in range(size)]
     row_labels = [f"$S_{{{index}}}$" for index in range(size)]
-    fig, ax = plt.subplots(figsize=(12.2, 10.2), dpi=180)
+    fig, ax = plt.subplots(figsize=(9.8, 8.0), dpi=220)
     vmin = float(matrix.min())
     vmax = float(matrix.max())
     if np.isclose(vmin, vmax):
@@ -246,19 +246,20 @@ def plot_cross_matrix(
     ax.set_xticks(
         np.arange(size),
         labels=labels,
-        fontsize=11 if mmd_reference == "adjacent" else 15,
+        fontsize=12 if mmd_reference == "adjacent" else 15,
     )
-    ax.set_yticks(np.arange(size), labels=row_labels, fontsize=18)
+    ax.set_yticks(np.arange(size), labels=row_labels, fontsize=16)
+    ax.tick_params(axis="x", labelcolor="#2b6cb0")
     if mmd_reference == "adjacent":
-        xlabel = r"Forecaster state ($\Delta D_i=\mathrm{MMD}(F_{i-1},F_i)$)"
+        xlabel = r"Forecaster state ($D$: adjacent MMD)"
     else:
         xlabel = "Forecaster state (D: MMD from F0)"
-    ax.set_xlabel(xlabel, fontsize=18, labelpad=23)
-    ax.set_ylabel("Surrogate state", fontsize=21, labelpad=22)
+    ax.set_xlabel(xlabel, fontsize=15, labelpad=18)
+    ax.set_ylabel("Surrogate state", fontsize=18, labelpad=18)
     ax.tick_params(length=0, pad=8)
     ax.set_title(
-        "Iterative Decision Adaptation under Scenario Distribution Shift\nCross-Evaluation Matrix: Normalized Dispatch Cost",
-        fontsize=22, fontweight="bold", pad=28,
+        "Cross-evaluation of iterative adaptation",
+        fontsize=21, fontweight="bold", pad=22,
     )
     ax.set_xticks(np.arange(-0.5, size, 1), minor=True)
     ax.set_yticks(np.arange(-0.5, size, 1), minor=True)
@@ -284,24 +285,9 @@ def plot_cross_matrix(
             zorder=5,
         )
     colorbar = fig.colorbar(image, ax=ax, fraction=0.045, pad=0.08)
-    colorbar.set_label("Normalized dispatch cost (lower is better)", fontsize=16, labelpad=15)
-    colorbar.ax.tick_params(labelsize=13)
-    fig.text(
-        0.5, 0.035,
-        "Diagonal: matched pair (Si, Fi); arrows: fixed Fi, update S(i-1) -> Si.",
-        ha="center", fontsize=12,
-    )
-    fig.text(
-        0.5, 0.012,
-        "All values are normalized by the (S0, F0) test-set operating cost.",
-        ha="center", fontsize=11,
-    )
-    fig.subplots_adjust(
-        left=0.15,
-        right=0.86,
-        top=0.79,
-        bottom=0.22 if mmd_reference == "adjacent" else 0.18,
-    )
+    colorbar.set_label("Normalized dispatch cost", fontsize=14, labelpad=12)
+    colorbar.ax.tick_params(labelsize=11)
+    fig.subplots_adjust(left=0.15, right=0.86, top=0.84, bottom=0.22)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
