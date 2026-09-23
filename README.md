@@ -150,6 +150,31 @@ Subsequent matrix evaluations load the saved phase-3 checkpoints directly and
 do not rerun phase-3 training. The number of evaluated rounds is inferred from
 the contiguous checkpoint files, so no separate `--rounds` argument is needed.
 
+## PV Station Mechanistic Consistency
+
+Install the optional dependencies for the mechanistic station-sensitivity
+experiment:
+
+```bash
+pip install -e ".[station-consistency]"
+```
+
+Run the experiment from the project root:
+
+```bash
+python scripts/experiments/pv_station_mechanistic_consistency/station_consistency.py
+```
+
+The script uses the trained `dual_agent.pt` checkpoint and all held-out test
+samples. It perturbs one PV station at a time by +/-5% of its capacity, compares
+the mechanistic LinDistFlow MILP with the jointly trained surrogate, and writes
+only the SVG result to
+`figures/pv_station_mechanistic_consistency/pv_station_mechanistic_consistency.svg`.
+The experiment does not retrain the models. Detailed protocol definitions,
+reproducibility metadata, validation audits and the recommended figure caption
+are documented in
+`scripts/experiments/pv_station_mechanistic_consistency/README.md`.
+
 ## Optional Baseline Teacher
 
 The Pyomo/HiGHS stochastic LinDistFlow teacher remains in

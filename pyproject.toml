@@ -23,6 +23,12 @@ baseline = [
   "pyomo>=6.8",
   "highspy>=1.7",
 ]
+station-consistency = [
+  "cvxpy>=1.4",
+  "highspy>=1.7",
+  "matplotlib>=3.7",
+  "scipy>=1.10",
+]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
