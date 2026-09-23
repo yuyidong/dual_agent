@@ -230,6 +230,7 @@ def main() -> None:
         for round_index, forecaster_epochs, surrogate_epochs in schedule:
             surrogate_initial_metrics = validation_metrics()
             surrogate_best_operating_cost = surrogate_initial_metrics["lindistflow_loss"]
+            surrogate_best_state = copy.deepcopy(system.surrogate.state_dict())
             forecaster_best_operating_cost = float("inf")
             if config.training.phase3_reset_forecaster_scheduler_per_round and forecaster_epochs:
                 for parameter_group in forecaster_optimizer.param_groups:
@@ -304,11 +305,14 @@ def main() -> None:
                     best_pair_state = copy.deepcopy(system.state_dict())
                 if validation_cost < surrogate_best_operating_cost:
                     surrogate_best_operating_cost = validation_cost
+                    surrogate_best_state = copy.deepcopy(system.surrogate.state_dict())
             if surrogate_epochs:
+                system.surrogate.load_state_dict(surrogate_best_state)
                 print(
                     f"round={round_index:02d} stage=surrogate "
                     f"epochs_completed={surrogate_epochs} "
-                    f"best_validation_objective={surrogate_best_operating_cost:.6f}"
+                    f"best_validation_objective={surrogate_best_operating_cost:.6f} "
+                    "checkpoint=validation_best"
                 )
                 save_surrogate_state(round_index)
                 print(f"saved phase3 state: S{round_index}")
@@ -321,6 +325,7 @@ def main() -> None:
                 continue
             forecaster_initial_metrics = validation_metrics()
             forecaster_best_operating_cost = forecaster_initial_metrics["lindistflow_loss"]
+            forecaster_best_state = copy.deepcopy(system.forecaster.state_dict())
             print(
                 f"round={round_index:02d}/{active_rounds:02d} "
                 f"stage=forecaster epochs={forecaster_epochs}"
@@ -447,10 +452,13 @@ def main() -> None:
                     best_pair_state = copy.deepcopy(system.state_dict())
                 if validation_cost < forecaster_best_operating_cost:
                     forecaster_best_operating_cost = validation_cost
+                    forecaster_best_state = copy.deepcopy(system.forecaster.state_dict())
+            system.forecaster.load_state_dict(forecaster_best_state)
             print(
                 f"round={round_index:02d} stage=forecaster "
                 f"epochs_completed={forecaster_epochs} "
-                f"best_validation_objective={forecaster_best_operating_cost:.6f}"
+                f"best_validation_objective={forecaster_best_operating_cost:.6f} "
+                "checkpoint=validation_best"
             )
             save_forecaster_state(round_index)
             print(f"saved phase3 state: F{round_index}")
