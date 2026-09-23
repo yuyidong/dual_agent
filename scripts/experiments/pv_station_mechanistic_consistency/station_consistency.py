@@ -13,7 +13,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from scipy.stats import rankdata, spearmanr
 from dual_agent.config import load_config
 from dual_agent.models.dual_agent import DualAgentSystem
 from dual_agent.opendss.lindistflow_torch import TorchLinDistFlowEvaluator
@@ -90,20 +89,73 @@ class MechanisticOPF:
 
 def perturb(base, capacity, mask, station, epsilon, direction):
     shifted = base.clone()
-    shifted[..., station] = (base[..., station] + direction*epsilon*capacity[station]*mask[..., station]).clamp(0, float(capacity[station]))
+    shifted[..., station] = base[..., station] + direction*epsilon*capacity[station]*mask[..., station]
     return shifted
+
+
+def common_perturbation_mask(base, capacity, daylight, epsilon, scale):
+    # A shared support preserves identical error timing and symmetric amplitudes.
+    margin = epsilon*scale
+    feasible = ((base >= margin) & (base <= capacity-margin)).all(dim=-1, keepdim=True)
+    active = daylight.bool().all(dim=-1, keepdim=True) & feasible
+    return active.expand_as(base).to(base.dtype)
+
+
+def station_ranks(values, rtol=1e-4):
+    """Treat sub-0.01% differences as numerical ties, not station evidence."""
+    values = np.asarray(values)
+    order = np.argsort(-values,kind='stable')
+    tolerance = max(float(np.abs(values).max())*rtol,1e-10)
+    ranks = np.empty_like(values,dtype=float)
+    start = 0
+    while start < len(order):
+        end = start+1
+        while end < len(order) and abs(values[order[end]]-values[order[start]]) <= tolerance:
+            end += 1
+        ranks[order[start:end]] = (start+1+end)/2
+        start = end
+    return ranks
+
+
+def ranking_agreement(scores):
+    ranks = np.array([station_ranks(v) for v in scores])
+    if any(np.ptp(v) == 0 for v in ranks):
+        return None
+    return float(np.corrcoef(ranks)[0,1])
+
+
+def paired_bootstrap(per_sample, seed=7, repeats=2000):
+    values = np.asarray(per_sample)
+    rng = np.random.default_rng(seed)
+    means = np.stack([values[rng.integers(len(values), size=len(values))].mean(0) for _ in range(repeats)])
+    maxima = means.max(-1, keepdims=True)
+    normalized = np.divide(means, maxima, out=np.zeros_like(means), where=maxima > 1e-12)
+    rhos = [r for v in means if (r := ranking_agreement(v)) is not None]
+    return {
+        'repeats':repeats, 'seed':seed, 'unit':'paired held-out sample',
+        'normalized_ci95':np.quantile(normalized,[.025,.975],axis=0).tolist(),
+        'importance_ci95':np.quantile(means,[.025,.975],axis=0).tolist(),
+        'spearman_ci95':np.quantile(rhos,[.025,.975]).tolist() if rhos else None,
+    }
 
 
 def plot_results(scores, names, epsilon, samples, output, rho, provenance):
     maxima = scores.max(axis=1, keepdims=True)
     normalized = np.divide(scores, maxima, out=np.zeros_like(scores), where=maxima > 1e-12)
-    ranks = np.array([rankdata(-v, method='average') for v in scores])
+    ranks = np.array([station_ranks(v) for v in scores])
     order = np.argsort(-scores[0], kind='stable')
     plt.rcParams.update({'font.family':'serif', 'font.serif':['Times New Roman','DejaVu Serif'], 'svg.fonttype':'none', 'font.size':11})
     fig, axes = plt.subplots(1,2,figsize=(10,4.3), gridspec_kw={'width_ratios':[1.3,1]}, layout='constrained')
     x = np.arange(len(names))
     axes[0].bar(x-.19, normalized[0,order], .38, color='#376d8b', label='Mechanistic OPF')
     axes[0].bar(x+.19, normalized[1,order], .38, color='#d69b43', hatch='//', label='Jointly trained surrogate')
+    if 'bootstrap' in provenance:
+        bounds = np.asarray(provenance['bootstrap']['normalized_ci95'])
+        for method, offset in enumerate((-.19,.19)):
+            low, high = bounds[:,method,order]
+            axes[0].vlines(x+offset,low,high,color='#333333',lw=1)
+            axes[0].hlines(low,x+offset-.035,x+offset+.035,color='#333333',lw=1)
+            axes[0].hlines(high,x+offset-.035,x+offset+.035,color='#333333',lw=1)
     axes[0].set(xticks=x, xticklabels=np.array(names)[order], ylim=(0,1.18), ylabel='Normalized importance', xlabel='PV station', title='(a) Station importance')
     axes[0].legend(frameon=False, fontsize=9)
     axes[1].plot([.6,len(names)+.4],[.6,len(names)+.4], '--', color='gray', lw=1)
@@ -111,12 +163,14 @@ def plot_results(scores, names, epsilon, samples, output, rho, provenance):
     for k,name in enumerate(names):
         axes[1].annotate(name,(ranks[0,k],ranks[1,k]),xytext=(6,6),textcoords='offset points',fontsize=9)
     axes[1].set(xlim=(.5,len(names)+.6),ylim=(.5,len(names)+.6),xticks=np.arange(1,len(names)+1),yticks=np.arange(1,len(names)+1),xlabel='Rank: mechanistic OPF',ylabel='Rank: jointly trained surrogate',title='(b) Ranking agreement')
-    axes[1].text(.04,.96,f'Spearman $\\rho$ = {rho:.3f}',transform=axes[1].transAxes,va='top')
+    agreement = f'Spearman $\\rho$ = {rho:.3f}' if rho is not None else 'No distinct ranking (ties)'
+    axes[1].text(.04,.96,agreement,transform=axes[1].transAxes,va='top')
     for ax in axes:
         ax.spines[['top','right']].set_visible(False)
         ax.grid(axis='y',alpha=.18)
         ax.set_axisbelow(True)
-    fig.suptitle(f'PV station importance under forecast perturbations\n$\\epsilon$ = {epsilon:.0%}; {samples} test samples', fontsize=14)
+    split = provenance.get('split','test')
+    fig.suptitle(f'PV station importance under forecast perturbations\n$\\epsilon$ = {epsilon:.0%}; {samples} {split} samples', fontsize=14)
     output.mkdir(parents=True,exist_ok=True)
     result = output/'pv_station_mechanistic_consistency.svg'
     provenance.update(importance=scores.tolist(), normalized=normalized.tolist(), ranks=ranks.tolist(), spearman=rho)
@@ -132,6 +186,8 @@ def main():
     parser.add_argument('--checkpoint',default='checkpoints/dual_agent.pt')
     parser.add_argument('--epsilon',type=float,default=.05)
     parser.add_argument('--samples',type=int,default=0,help='0 uses the full test split')
+    parser.add_argument('--split',choices=('validation','test'),default='test')
+    parser.add_argument('--perturbation',choices=('relative-capacity','equal-power'),default='relative-capacity')
     parser.add_argument('--output-dir',default='figures/pv_station_mechanistic_consistency')
     args = parser.parse_args()
     if not 0 < args.epsilon < 1 or args.samples < 0:
@@ -141,7 +197,8 @@ def main():
     torch.manual_seed(config.seed)
     dataset = ScenarioDataset(args.data)
     validate_dataset_matches_config(dataset, config)
-    _,_,loader = make_train_validation_test_loaders(dataset,batch_size=1,train_fraction=config.data_split.train_fraction,validation_fraction=config.data_split.validation_fraction,test_fraction=config.data_split.test_fraction,seed=config.seed)
+    _,validation,test = make_train_validation_test_loaders(dataset,batch_size=1,train_fraction=config.data_split.train_fraction,validation_fraction=config.data_split.validation_fraction,test_fraction=config.data_split.test_fraction,seed=config.seed)
+    loader = validation if args.split == 'validation' else test
     f,s = build_models(config,dataset.pv_history.shape[2])
     system = DualAgentSystem(f,s)
     system.load_state_dict(torch.load(args.checkpoint,map_location='cpu',weights_only=True))
@@ -151,8 +208,8 @@ def main():
     opf = MechanisticOPF(e,config)
     names = list(config.network.pv_systems)
     count = min(args.samples or len(loader),len(loader))
-    sensitivity, baseline_costs, violations = [], [], []
-    clipped, eligible = 0, 0
+    sensitivity, baseline_costs, violations, support_fractions = [], [], [], []
+    forecast_spreads, out_of_bounds = [], []
     for n,batch in enumerate(loader):
         if n >= count:
             break
@@ -161,14 +218,20 @@ def main():
             raise ValueError('Synthetic dataset capacity feature must be positive')
         with torch.no_grad():
             raw = f(batch['pv_history'],graph)
-        # Use the same physical bounds for baseline and perturbed inputs.
-        base = torch.minimum(raw.clamp_min(0),capacity)
+        # Preserve the deployed model input, including any decision-focused bias.
+        base = raw
+        forecast_spreads.append(float((raw.amax(-1)-raw.amin(-1)).max()))
+        out_of_bounds.append(float(((raw < 0) | (raw > capacity)).float().mean()))
         # Match future hours to the known historical clear-sky feature.
         history_hours = batch['pv_history'][0,:,0,3]*24
         future_hours = (history_hours[-1]+config.problem.interval_hours*torch.arange(1,base.shape[2]+1)) % 24
         distance = (history_hours[:,None]-future_hours[None,:]).abs()
         nearest = torch.minimum(distance,24-distance).argmin(dim=0)
-        mask = (batch['pv_history'][0,nearest,:,1] > 1e-6).float()[None,None]
+        daylight = (batch['pv_history'][0,nearest,:,1] > 1e-6).float()[None,None]
+        scale = capacity if args.perturbation == 'relative-capacity' else torch.full_like(capacity, float(capacity.min()))
+        mask = common_perturbation_mask(base,capacity,daylight,args.epsilon,scale)
+        fraction = float(mask.sum()/daylight.expand_as(base).sum().clamp_min(1))
+        support_fractions.append(fraction)
         def costs(pv):
             with torch.no_grad():
                 learned = s(pv,batch['load_forecast'],graph)['dispatch'].double()
@@ -185,36 +248,42 @@ def main():
         current = np.zeros((2,len(names)))
         for k in range(len(names)):
             for direction in (-1,1):
-                changed = perturb(base,capacity,mask,k,args.epsilon,direction)
-                active = mask[...,k].expand_as(base[...,k]).bool()
-                actual = (changed[...,k]-base[...,k]).abs()
-                clipped += int(((actual < args.epsilon*capacity[k]-1e-5)&active).sum())
-                eligible += int(active.sum())
-                current[:,k] += np.abs(costs(changed)-baseline)/(2*args.epsilon)
+                changed = perturb(base,scale,mask,k,args.epsilon,direction)
+                # Shared support and denominator across stations; no post-hoc clipping.
+                if fraction > 0:
+                    current[:,k] += np.abs(costs(changed)-baseline)/(2*args.epsilon*fraction)
         sensitivity.append(current)
         print(f'sample={n+1}/{count} baseline_opf={baseline[0]:.6f} baseline_surrogate={baseline[1]:.6f}',flush=True)
     scores = np.mean(sensitivity,axis=0)
-    rho = float(spearmanr(scores[0],scores[1]).statistic)
+    rho = ranking_agreement(scores)
     provenance = {
-        'epsilon':args.epsilon, 'samples':count, 'seed':config.seed,
+        'epsilon':args.epsilon, 'samples':count, 'seed':config.seed, 'split':args.split,
+        'perturbation':args.perturbation,
+        'rank_relative_tolerance':1e-4,
         'stations':names, 'test_indices':list(loader.dataset.indices[:count]),
-        'capacity_kw':capacity.tolist(), 'mask':'historical clear-sky at matching time of day',
-        'baseline':'forecaster output clipped to [0, station capacity]',
+        'capacity_kw':capacity.tolist(), 'mask':'shared daylight support with full symmetric headroom at every station',
+        'baseline':'unaltered deployed forecaster output; never clipped',
+        'importance_denominator':'2 * epsilon * common daylight support fraction',
+        'support_fractions':support_fractions,
+        'mean_out_of_capacity_fraction':float(np.mean(out_of_bounds)),
+        'max_forecast_station_spread':max(forecast_spreads),
         'solver':'HiGHS MILP, relative gap 1e-7; hard battery power/SOC and charge-discharge exclusion; soft voltage/line/terminal penalties',
         'checkpoint_sha256':hashlib.sha256(Path(args.checkpoint).read_bytes()).hexdigest(),
         'config_text':Path(args.config).read_text(),
         'per_sample_importance':np.array(sensitivity).tolist(),
         'mean_baseline_costs':np.mean(baseline_costs,axis=0).tolist(),
-        'clipping_fraction':clipped/max(eligible,1),
+        'clipping_fraction':0.0,
         'max_violations':np.max(violations,axis=0).tolist(),
+        'bootstrap':paired_bootstrap(sensitivity,seed=config.seed),
     }
     result, normalized, ranks = plot_results(scores,names,args.epsilon,count,Path(args.output_dir),rho,provenance)
     print('station,opf_importance,surrogate_importance,opf_normalized,surrogate_normalized,opf_rank,surrogate_rank')
     for k,name in enumerate(names):
         print(name,*scores[:,k],*normalized[:,k],*ranks[:,k],sep=',')
-    print(f'spearman={rho:.6f}; clipping_fraction={clipped/max(eligible,1):.6f}')
+    print(f'spearman={rho}; mean_support_fraction={np.mean(support_fractions):.6f}; clipping_fraction=0')
     print('mean_baseline_costs=',np.mean(baseline_costs,axis=0))
     print('max_violations [voltage,line,soc,terminal]=',np.max(violations,axis=0))
+    print('paired_bootstrap=',json.dumps(provenance['bootstrap']))
     print(f'output={result.resolve()}')
 
 
