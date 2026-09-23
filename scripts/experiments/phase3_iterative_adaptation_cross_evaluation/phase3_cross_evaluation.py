@@ -257,7 +257,8 @@ def plot_cross_matrix(
         # Each alternating round first updates F_{i-1} -> F_i with S_{i-1}
         # fixed, then updates S_{i-1} -> S_i with F_i fixed.
         ax.annotate(
-            "", xy=(i - 0.27, i - 1), xytext=(i - 1 + 0.27, i - 1),
+            "", xy=(i - 0.31, i - 1 + 0.32),
+            xytext=(i - 1 + 0.31, i - 1 + 0.32),
             arrowprops={"arrowstyle": "->", "color": "#2b6cb0", "lw": 1.4},
             zorder=5,
         )
