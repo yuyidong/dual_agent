@@ -157,7 +157,7 @@ def plot_results(scores, names, epsilon, samples, output, rho, provenance):
     })
     # Double-column width; outlined glyphs preserve the font when embedding SVG.
     fig, axes = plt.subplots(1,2,figsize=(7.16,3.0), gridspec_kw={'width_ratios':[1.28,1]})
-    fig.subplots_adjust(left=.083,right=.985,bottom=.18,top=.86,wspace=.32)
+    fig.subplots_adjust(left=.083,right=.985,bottom=.25,top=.86,wspace=.32)
     display_names = [name.replace('pv_','PV ') for name in names]
     x = np.arange(len(names))
     width = .34
@@ -174,8 +174,9 @@ def plot_results(scores, names, epsilon, samples, output, rho, provenance):
                 yticks=np.arange(0,1.01,.2), ylabel='Normalized importance', xlabel='PV station')
     axes[0].set_xlim(-.6,len(names)-.4)
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.51,1.015),ncol=2,
-               frameon=False,fontsize=9,handlelength=1.7,handletextpad=.6,columnspacing=2.0)
+    axes[0].legend(handles,labels,loc='upper center',bbox_to_anchor=(.50,1.02),ncol=2,
+                   frameon=False,fontsize=8.5,handlelength=1.7,handletextpad=.6,
+                   columnspacing=1.5,borderaxespad=0.)
     axes[1].plot([.6,len(names)+.4],[.6,len(names)+.4],color='#929292',lw=.75,dashes=(3,3),zorder=1)
     axes[1].scatter(ranks[0],ranks[1],color='#376d8b',edgecolor='white',linewidth=.6,s=32,zorder=3)
     for k,name in enumerate(display_names):
@@ -188,11 +189,15 @@ def plot_results(scores, names, epsilon, samples, output, rho, provenance):
     axes[1].set_aspect('equal',adjustable='box')
     agreement = f'Spearman $\\rho = {rho:.2f}$' if rho is not None else 'No distinct ranking (ties)'
     axes[1].text(.04,.96,agreement,transform=axes[1].transAxes,va='top',fontsize=9)
-    for panel,ax in zip(('(a)','(b)'),axes):
+    for ax in axes:
         ax.spines[['top','right']].set_visible(False)
         ax.grid(axis='y',color='#e4e4e4',lw=.45)
         ax.set_axisbelow(True)
-        ax.text(0,1.045,panel,transform=ax.transAxes,fontsize=11,fontweight='bold',va='bottom')
+    # Put subfigure captions below the x-axis labels, as expected in papers.
+    for ax, caption in zip(axes, ('(a) Station importance', '(b) Ranking agreement')):
+        position = ax.get_position()
+        fig.text(position.x0 + position.width / 2, .065, caption,
+                 ha='center', va='center', fontsize=10)
     output.mkdir(parents=True,exist_ok=True)
     result = output/'pv_station_mechanistic_consistency.svg'
     provenance.update(importance=scores.tolist(), normalized=normalized.tolist(), ranks=ranks.tolist(), spearman=rho)
