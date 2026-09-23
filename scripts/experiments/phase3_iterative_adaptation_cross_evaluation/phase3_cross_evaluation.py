@@ -232,10 +232,6 @@ def plot_cross_matrix(
     ax.set_xlabel(xlabel, fontsize=15, labelpad=18)
     ax.set_ylabel("Surrogate state", fontsize=18, labelpad=18)
     ax.tick_params(length=0, pad=8)
-    ax.set_title(
-        "Cross-evaluation of iterative adaptation",
-        fontsize=21, fontweight="bold", pad=22,
-    )
     ax.set_xticks(np.arange(-0.5, size, 1), minor=True)
     ax.set_yticks(np.arange(-0.5, size, 1), minor=True)
     ax.grid(which="minor", color="white", linewidth=2.2)
