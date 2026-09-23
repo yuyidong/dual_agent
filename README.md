@@ -134,19 +134,7 @@ surrogate stage is saved under `checkpoints/phase3_states/` as
 
 ## Cross-Evaluation Matrix
 
-Run phase 3 once to create the stage checkpoints:
-
-```bash
-python scripts/training/train_joint.py \
-  --config configs/ieee13.yaml \
-  --data data/ieee13/ieee13.npz \
-  --forecaster-checkpoint checkpoints/forecaster.pt \
-  --surrogate-checkpoint checkpoints/surrogate.pt \
-  --checkpoint checkpoints/dual_agent.pt \
-  --phase3-checkpoint-dir checkpoints/phase3_states
-```
-
-Then evaluate all `S_i/F_j` combinations without retraining phase 3:
+Evaluate all `S_i/F_j` combinations without retraining phase 3:
 
 ```bash
 python scripts/experiments/phase3_iterative_adaptation_cross_evaluation/phase3_cross_evaluation.py \
