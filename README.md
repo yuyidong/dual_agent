@@ -150,6 +150,29 @@ Subsequent matrix evaluations load the saved phase-3 checkpoints directly and
 do not rerun phase-3 training. The number of evaluated rounds is inferred from
 the contiguous checkpoint files, so no separate `--rounds` argument is needed.
 
+## Phase 3 Training Strategy Comparison
+
+Compare `forecast-only`, `surrogate-only`, and the saved `alternating` checkpoints
+under the same number of phase-3 rounds:
+
+```bash
+python scripts/experiments/phase3_training_strategy_comparison/phase3_training_strategy_comparison.py \
+  --strategy all
+```
+
+The experiment uses the phase-3 checkpoints in `checkpoints/phase3_states/` for
+the alternating strategy and saves validation-best single-module checkpoints
+under `checkpoints/phase3_training_strategy_comparison/`. To regenerate only
+the figure without retraining the two single-module baselines, run:
+
+```bash
+python scripts/experiments/phase3_training_strategy_comparison/phase3_training_strategy_comparison.py \
+  --strategy plot
+```
+
+Only the final SVG is written to
+`figures/phase3_training_strategy_comparison/phase3_training_strategy_comparison.svg`.
+
 ## PV Station Mechanistic Consistency
 
 Install the optional dependencies for the mechanistic station-sensitivity
