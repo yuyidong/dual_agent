@@ -39,7 +39,7 @@ pytest
 ## Generate Dataset
 
 ```bash
-python scripts/generate_dataset.py --config configs/ieee13.yaml --out data/ieee13.npz
+python scripts/data/generate_dataset.py --config configs/ieee13.yaml --out data/ieee13/ieee13.npz
 ```
 
 The dataset contains `pv_history`, `pv_target`, and `load_forecast`. The main training workflow
@@ -47,16 +47,28 @@ uses the forecaster to produce scenarios, so saved dataset `pv_scenarios` are op
 generated only when `problem.generate_dataset_scenarios` is true. The workflow does not require
 offline OPF dispatch or cost labels.
 
+## Dataset Split
+
+The current workflow uses a reproducible random split configured in
+configs/ieee13.yaml:
+
+    data_split:
+      train_fraction: 0.64
+      validation_fraction: 0.16
+      test_fraction: 0.20
+
+The same project seed controls the random partition in all training stages.
+
 ## Train Forecaster
 
 ```bash
-python scripts/train_forecaster.py --config configs/ieee13.yaml --data data/ieee13.npz --checkpoint forecaster.pt --swanlab
+python scripts/training/train_forecaster.py --config configs/ieee13.yaml --data data/ieee13/ieee13.npz --checkpoint checkpoints/forecaster.pt --swanlab
 ```
 
 ## Train Surrogate
 
 ```bash
-python scripts/train_surrogate.py --config configs/ieee13.yaml --data data/ieee13.npz --forecaster-checkpoint forecaster.pt --checkpoint surrogate.pt --swanlab
+python scripts/training/train_surrogate.py --config configs/ieee13.yaml --data data/ieee13/ieee13.npz --forecaster-checkpoint checkpoints/forecaster.pt --checkpoint checkpoints/surrogate.pt --swanlab
 ```
 
 The surrogate dispatch network is trained end-to-end through a Torch LinDistFlow layer. Its loss is
@@ -74,12 +86,12 @@ violations.
 ## Joint Training
 
 ```bash
-python scripts/train_joint.py --config configs/ieee13.yaml --data data/ieee13.npz --forecaster-checkpoint forecaster.pt --surrogate-checkpoint surrogate.pt --checkpoint dual_agent.pt --swanlab
+python scripts/training/train_joint.py --config configs/ieee13.yaml --data data/ieee13/ieee13.npz --forecaster-checkpoint checkpoints/forecaster.pt --surrogate-checkpoint checkpoints/surrogate.pt --checkpoint checkpoints/dual_agent.pt --phase3-checkpoint-dir checkpoints/phase3_states --swanlab
 ```
 
-Each trainer logs `train/loss`, `test/loss`, and `learning_rate` to SwanLab when `--swanlab` is set. Use `--swanlab-project` and `--swanlab-experiment` to override the default project and run names.
+Each trainer logs train/loss, validation/loss, test/loss, and learning_rate to SwanLab when --swanlab is set.
 Surrogate and joint training also log actual-PV operating cost, voltage violation, line-flow
-violation, kW violation, SOC violation, terminal SOC deviation, and curtailment cost on both train and test splits. Joint training
+violation, kW violation, SOC violation, terminal SOC deviation, and curtailment cost on the train, validation, and test splits where applicable. Joint training
 minimizes `lindistflow_loss` with a soft forecast-loss constraint:
 `lindistflow_loss + joint_forecast_constraint_weight * max(0, forecast_loss - forecast_loss_cap)`,
 where `forecast_loss_cap` is the initial train forecast loss multiplied by
@@ -92,29 +104,62 @@ Phase 3 is controlled by explicit `phase3_*` fields in `configs/ieee13.yaml`:
 ```yaml
 training:
   phase3_mode: alternating
-  phase3_forecaster_epochs: 500
-  phase3_surrogate_epochs: 100
-  phase3_rounds: 5
+  phase3_forecaster_epochs: 5000
+  phase3_surrogate_epochs: 5000
+  phase3_rounds: 10
 ```
 
 `phase3_mode: forecast_only` freezes the pretrained surrogate and fine-tunes only the forecaster
 for `phase3_forecaster_epochs`. `phase3_mode: surrogate_only` freezes the forecaster and adapts only
 the surrogate for `phase3_surrogate_epochs` using scenarios from the current forecaster.
 `phase3_mode: alternating` divides `phase3_forecaster_epochs` and `phase3_surrogate_epochs` as evenly
-as possible across `phase3_rounds`; each round adapts the surrogate first, then freezes it while the
-forecaster is decision-focused tuned.
+as possible across `phase3_rounds`; each round first updates the forecaster, then freezes it while the
+surrogate adapts to the resulting scenario distribution.
 
 Both phase-3 stages log fresh measurements into the same `train/*` and `test/*` metric series. Use
 `training_phase` to distinguish them: `0` means surrogate adaptation and `1` means forecaster
-fine-tuning. Joint forecaster fine-tuning uses `training.joint_learning_rate`; phase-3 surrogate
-adaptation uses `training.joint_surrogate_learning_rate`. The older `joint_epochs`,
-`joint_rounds`, `joint_surrogate_epochs_per_round`, `joint_training_mode`, and
-`joint_alternating_updates` fields are still accepted as compatibility fallbacks, but new
-experiments should prefer the clearer `phase3_*` fields.
+fine-tuning. Phase 3 forecaster updates use `training.phase3_forecaster_learning_rate`; phase-3 surrogate
+updates use `training.phase3_surrogate_learning_rate`. The phase-3 schedule is defined only by
+`phase3_mode`, `phase3_forecaster_epochs`, `phase3_surrogate_epochs`, and `phase3_rounds`;
+legacy `joint_*` schedule fields are no longer part of the configuration.
 
 Epoch counts for the three main phases are `training.forecaster_epochs`,
-`training.surrogate_epochs`, and the phase-3 `training.phase3_*_epochs` fields. The first two phases
-use `training.learning_rate`.
+`training.surrogate_epochs`, and the phase-3 `training.phase3_*_epochs` fields. Phase 1 and Phase 2 use `training.forecaster_learning_rate` and `training.surrogate_learning_rate`, respectively. Every configured epoch is executed. Standalone training saves the validation-best model after the full epoch budget, while phase 3 saves the best complete forecaster-surrogate pair selected by the validation objective.
+
+During phase 3, the validation-best model at the end of every forecaster and
+surrogate stage is saved under `checkpoints/phase3_states/` as
+`forecaster_00.pt` ... `forecaster_05.pt` and `surrogate_00.pt` ...
+`surrogate_05.pt`. The `00` files are the initial phase-3 states. The
+`checkpoints/dual_agent.pt` file remains the globally best complete pair.
+
+## Cross-Evaluation Matrix
+
+Run phase 3 once to create the stage checkpoints:
+
+```bash
+python scripts/training/train_joint.py \
+  --config configs/ieee13.yaml \
+  --data data/ieee13/ieee13.npz \
+  --forecaster-checkpoint checkpoints/forecaster.pt \
+  --surrogate-checkpoint checkpoints/surrogate.pt \
+  --checkpoint checkpoints/dual_agent.pt \
+  --phase3-checkpoint-dir checkpoints/phase3_states
+```
+
+Then evaluate all `S_i/F_j` combinations without retraining phase 3:
+
+```bash
+python scripts/experiments/phase3_iterative_adaptation_cross_evaluation/phase3_cross_evaluation.py \
+  --config configs/ieee13.yaml \
+  --data data/ieee13/ieee13.npz \
+  --phase3-checkpoint-dir checkpoints/phase3_states \
+  --output-dir figures/phase3_iterative_adaptation_cross_evaluation
+```
+
+The experiment writes only the final SVG matrix to
+`figures/phase3_iterative_adaptation_cross_evaluation/phase3_cross_evaluation_matrix.svg`.
+Subsequent matrix evaluations load the saved phase-3 checkpoints directly and
+do not rerun phase-3 training.
 
 ## Optional Baseline Teacher
 
