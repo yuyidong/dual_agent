@@ -53,15 +53,14 @@ def main() -> None:
     parser.add_argument("--train-fraction", type=float, default=None)
     parser.add_argument("--validation-fraction", type=float, default=None)
     parser.add_argument("--test-fraction", type=float, default=None)
-    parser.add_argument("--phase3-disable-dropout", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--swanlab", action="store_true", help="Track training metrics with SwanLab.")
     parser.add_argument("--swanlab-project", default="dual-agent-opf")
     parser.add_argument("--swanlab-experiment", default="joint")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    disable_dropout = (config.training.phase3_disable_dropout
-                       if args.phase3_disable_dropout is None else args.phase3_disable_dropout)
+    # Phase 3 uses deterministic model behavior: dropout is always disabled.
+    disable_dropout = True
     train_fraction = (
         config.data_split.train_fraction
         if args.train_fraction is None else args.train_fraction
@@ -170,7 +169,7 @@ def main() -> None:
             "validation_fraction": validation_fraction,
             "test_fraction": test_fraction,
             "validation_fraction_of_train": validation_fraction,
-            "phase3_disable_dropout": disable_dropout,
+            "phase3_dropout": "disabled",
             "alternating_order": "forecaster_then_surrogate",
             "device": str(device),
             "initial_forecast_loss": initial_forecast_loss,
@@ -190,15 +189,14 @@ def main() -> None:
         else [0]
     )
     total_surrogate_epochs = _total_joint_surrogate_epochs(config.training)
-    forecaster_scheduler = None
-    if not config.training.phase3_reset_forecaster_scheduler_per_round:
-        forecaster_scheduler = make_warmup_cosine_scheduler(
-            forecaster_optimizer,
-            max(1, sum(forecaster_epochs_per_round)),
-            len(train_loader),
-            config.training.warmup_epochs,
-            config.training.min_learning_rate_ratio,
-        )
+    # Keep one continuous forecaster scheduler across all phase-3 rounds.
+    forecaster_scheduler = make_warmup_cosine_scheduler(
+        forecaster_optimizer,
+        max(1, sum(forecaster_epochs_per_round)),
+        len(train_loader),
+        config.training.warmup_epochs,
+        config.training.min_learning_rate_ratio,
+    )
     surrogate_scheduler = make_warmup_cosine_scheduler(
         surrogate_optimizer,
         total_surrogate_epochs,
@@ -232,16 +230,6 @@ def main() -> None:
             surrogate_best_operating_cost = surrogate_initial_metrics["lindistflow_loss"]
             surrogate_best_state = copy.deepcopy(system.surrogate.state_dict())
             forecaster_best_operating_cost = float("inf")
-            if config.training.phase3_reset_forecaster_scheduler_per_round and forecaster_epochs:
-                for parameter_group in forecaster_optimizer.param_groups:
-                    parameter_group["lr"] = config.training.phase3_forecaster_learning_rate
-                forecaster_scheduler = make_warmup_cosine_scheduler(
-                    forecaster_optimizer,
-                    forecaster_epochs,
-                    len(train_loader),
-                    min(config.training.warmup_epochs, forecaster_epochs),
-                    config.training.min_learning_rate_ratio,
-                )
             if surrogate_epochs:
                 print(
                     f"round={round_index:02d}/{active_rounds:02d} "

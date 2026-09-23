@@ -3,40 +3,38 @@
 The third-stage training loop previously enabled dropout in the module being
 updated and disabled it in the frozen module. Transformer attention has its own
 functional dropout; disabling only `nn.Dropout` does not remove this difference.
+In alternating mode, each round always updates the forecaster first and then the surrogate.
 
 ## Training changes
 
-`train_joint.py --phase3-disable-dropout` disables regular, attention and recurrent
-dropout without freezing parameters. `--forecaster-first` runs F then S within
-each alternating round. The recommended configuration enables both; command-line
-boolean options can override the configuration.
+Phase 3 permanently disables regular, attention and recurrent dropout during
+training to keep the alternating updates deterministic.
 
 The original training partition now supplies a separate validation subset.
-When stage early stopping is enabled, the stage's initial model is a candidate,
-and model, optimizer and scheduler states are restored together. Selection uses
-the validation LinDistFlow objective, including the configured constraint terms.
-The selected state is restored even when a stage exhausts its epoch budget.
-The final saved pair is the best validation pair including the initial pair.
-The test partition is not used for automatic model selection.
+Every configured stage runs its complete epoch budget. The validation LinDistFlow
+objective is evaluated after each epoch, and the final saved pair is the best
+complete forecaster-surrogate pair observed during the schedule, including the
+initial pair. The test partition is not used for automatic model selection.
 
 ## Controlled experiment
 
 Run from the server repository root:
 
 ```bash
-python scripts/experiments/phase3_adaptation_ablation.py \
-  --config configs/ieee13_phase3_recommended.yaml \
+python scripts/experiments/phase3_iterative_adaptation_cross_evaluation/phase3_adaptation_ablation.py \
+  --config configs/ieee13.yaml \
   --seeds 7 17 27 37 47 \
-  --arms forecast_only forecast_budget alternating \
-  --output-dir figures/adaptation_five_seeds
-python scripts/experiments/summarize_adaptation.py figures/adaptation_five_seeds
+  --arms alternating \
+  --output-dir figures/phase3_iterative_adaptation_cross_evaluation
+python scripts/experiments/phase3_iterative_adaptation_cross_evaluation/aggregate_phase3_matrices.py --input-dir figures/phase3_iterative_adaptation_cross_evaluation
 ```
 
 The experiment uses 300 F epochs and 200 S epochs across five rounds. Controls
 use 300 F epochs (equal forecaster budget) and 500 F epochs (equal number of
 optimizer updates). Epochs use the same batches per epoch; wall-clock cost is
-not necessarily equal. Learning rates remain constant in this diagnostic
-experiment. Production training retains its configurable scheduler.
+not necessarily equal. Learning rates remain constant in this diagnostic        
+experiment. Production training uses one continuous forecaster scheduler across
+all phase-3 rounds.
 
 All arms share pretrained checkpoints and train/validation/test partitions.
 Seed changes affect third-stage optimization only, not independent pretraining.
@@ -44,8 +42,6 @@ Each surrogate stage is assessed with the forecaster fixed. Selection includes
 the pre-update baseline; both validation objective and operating cost must
 improve, without worsening voltage, flow, battery-power or SOC violations beyond
 1e-6. Terminal SOC deviation remains a soft penalty and is reported separately.
-The production early-stopping rule uses the aggregate objective and is not
-identical to this stricter diagnostic acceptance rule.
 
 `--dropout` enables the original stochastic behavior for a matched ablation.
 The initial `adaptation_pilot` disabled regular/recurrent dropout but left

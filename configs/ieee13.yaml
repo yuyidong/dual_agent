@@ -51,6 +51,11 @@ problem:
   pv_feature_dim: 6
   load_feature_dim: 2
 
+data_split:
+  train_fraction: 0.64
+  validation_fraction: 0.16
+  test_fraction: 0.20
+
 lindistflow:
   voltage_lower: 0.95
   voltage_upper: 1.05
@@ -90,36 +95,39 @@ model:
   dropout: 0.1
 
 training:
+  # Phase 1 and phase 2 training budgets
   batch_size: 256
-  forecaster_epochs: 500
-  surrogate_epochs: 1200
+  forecaster_epochs: 1000
+  surrogate_epochs: 1000
+
+  # Phase 3 training schedule
   phase3_mode: alternating
-  phase3_forecaster_epochs: 1500
-  phase3_surrogate_epochs: 1000
-  phase3_rounds: 5
-  learning_rate: 0.00015
-  joint_learning_rate: 0.0001
-  joint_surrogate_learning_rate: 0.00001
+  phase3_forecaster_epochs: 5000
+  phase3_surrogate_epochs: 5000
+  phase3_rounds: 10
+
+  # Learning rates for independent Phase 1 and Phase 2 training
+  forecaster_learning_rate: 0.00015
+  surrogate_learning_rate: 0.00005
+
+  # Learning rates for Phase 3 alternating updates
+  phase3_forecaster_learning_rate: 0.00015
+  phase3_surrogate_learning_rate: 0.00005
+
+  # Shared optimizer settings
   warmup_epochs: 30
   min_learning_rate_ratio: 0.1
   max_grad_norm: 1.0
+
+  # Forecast-preservation constraint during forecaster adaptation
+  joint_forecast_loss_weight: 0.0
   joint_forecast_loss_tolerance: 0.2
   joint_forecast_constraint_weight: 0.2
+
+  # Differentiable dispatch objective weights
   operating_cost_loss_weight: 0.5
   voltage_violation_loss_weight: 10
   line_flow_violation_loss_weight: 10
   kw_violation_loss_weight: 0
   soc_violation_loss_weight: 0
   terminal_soc_loss_weight: 200
-
-  phase3_disable_dropout: true
-
-  phase3_forecaster_first: true
-
-  phase3_validation_fraction: 0.2
-
-  phase3_early_stopping_patience: 50
-
-  phase3_early_stopping_min_delta: 0.001
-
-  phase3_validation_interval: 10

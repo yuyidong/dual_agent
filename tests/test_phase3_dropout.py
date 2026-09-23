@@ -31,13 +31,5 @@ class Phase3DropoutTests(unittest.TestCase):
         self.assertEqual(model[0][0].p, 0.)
         self.assertEqual(model[1].dropout, 0.)
 
-    def test_config_exposes_phase3_adaptation_controls(self):
-        from dual_agent.config import load_config
-        config = load_config("configs/ieee13_phase3_recommended.yaml")
-        self.assertTrue(config.training.phase3_disable_dropout)
-        self.assertTrue(config.training.phase3_forecaster_first)
-        self.assertEqual(config.training.phase3_validation_fraction, 0.2)
-
-
 if __name__ == '__main__':
     unittest.main()
