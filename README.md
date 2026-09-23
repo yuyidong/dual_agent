@@ -147,7 +147,8 @@ python scripts/experiments/phase3_iterative_adaptation_cross_evaluation/phase3_c
 The experiment writes only the final SVG matrix to
 `figures/phase3_iterative_adaptation_cross_evaluation/phase3_cross_evaluation_matrix.svg`.
 Subsequent matrix evaluations load the saved phase-3 checkpoints directly and
-do not rerun phase-3 training.
+do not rerun phase-3 training. The number of evaluated rounds is inferred from
+the contiguous checkpoint files, so no separate `--rounds` argument is needed.
 
 ## Optional Baseline Teacher
 

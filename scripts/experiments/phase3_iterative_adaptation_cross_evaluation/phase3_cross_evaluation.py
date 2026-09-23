@@ -40,6 +40,41 @@ def load_module_checkpoint(module: torch.nn.Module, path: Path) -> None:
     module.load_state_dict(payload)
 
 
+def discover_phase3_rounds(checkpoint_dir: Path) -> int:
+    """Infer the available phase-3 stages from saved module checkpoints."""
+    def collect_stages(prefix: str) -> set[int]:
+        stages = set()
+        for path in checkpoint_dir.glob(f"{prefix}_*.pt"):
+            suffix = path.stem.rsplit("_", 1)[-1]
+            if suffix.isdigit():
+                stages.add(int(suffix))
+        return stages
+
+    forecaster_stages = collect_stages("forecaster")
+    surrogate_stages = collect_stages("surrogate")
+    if not forecaster_stages or not surrogate_stages:
+        raise FileNotFoundError(
+            f"No phase-3 stage checkpoints found in {checkpoint_dir}. "
+            "Run train_joint.py first."
+        )
+    if forecaster_stages != surrogate_stages:
+        raise ValueError(
+            "Forecaster and surrogate stage checkpoints do not match: "
+            f"forecaster={sorted(forecaster_stages)}, "
+            f"surrogate={sorted(surrogate_stages)}"
+        )
+    last_stage = max(forecaster_stages)
+    missing = sorted(set(range(last_stage + 1)) - forecaster_stages)
+    if missing:
+        raise FileNotFoundError(
+            f"Missing contiguous phase-3 stage checkpoint(s) {missing} in "
+            f"{checkpoint_dir}."
+        )
+    if last_stage < 1:
+        raise ValueError("At least one completed phase-3 round is required.")
+    return last_stage
+
+
 def build_models(config: Any, nodes: int) -> tuple[PVScenarioForecaster, OPFSurrogate]:
     forecaster = PVScenarioForecaster(
         pv_feature_dim=config.problem.pv_feature_dim,
@@ -248,14 +283,18 @@ def main() -> None:
     parser.add_argument("--train-fraction", type=float, default=None)
     parser.add_argument("--validation-fraction", type=float, default=None)
     parser.add_argument("--test-fraction", type=float, default=None)
-    parser.add_argument("--rounds", type=int, default=None)
     parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
 
     config = load_config(args.config)
-    rounds = args.rounds or config.training.phase3_rounds
-    if rounds < 1:
-        raise ValueError("--rounds must be positive")
+    checkpoint_dir = Path(args.phase3_checkpoint_dir)
+    rounds = discover_phase3_rounds(checkpoint_dir)
+    if config.training.phase3_rounds != rounds:
+        print(
+            "warning=checkpoint rounds differ from config; "
+            f"using saved stages ({rounds}) instead of configured "
+            f"rounds ({config.training.phase3_rounds})"
+        )
 
     seed = config.seed if args.seed is None else args.seed
     torch.manual_seed(seed)
@@ -293,7 +332,6 @@ def main() -> None:
         config.network.batteries, config.lindistflow, config.problem.interval_hours,
     ).to(device)
 
-    checkpoint_dir = Path(args.phase3_checkpoint_dir)
     forecaster_states: list[dict[str, torch.Tensor]] = []
     surrogate_states: list[dict[str, torch.Tensor]] = []
     for stage in range(rounds + 1):
