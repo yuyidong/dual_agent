@@ -206,13 +206,15 @@ def plot_cross_matrix(
         labels = [f"$F_{{{index}}}$" for index in range(size)]
     elif mmd_reference == "adjacent":
         labels = [f"$F_{{{index}}}$" if index == 0 else
-                  f"$F_{{{index}}}$\n$D={forecaster_mmd[index]:.2f}$"
+                  f"$F_{{{index}}}$\n${forecaster_mmd[index]:.3f}$"
                   for index in range(size)]
     else:
         labels = [f"$F_{{{index}}}$\n$D={forecaster_mmd[index]:.2f}$"
                   for index in range(size)]
     row_labels = [f"$S_{{{index}}}$" for index in range(size)]
-    fig, ax = plt.subplots(figsize=(9.8, 8.0), dpi=220)
+    # Physical single-column size; save without tight cropping to preserve it.
+    fig = plt.figure(figsize=(85 / 25.4, 76 / 25.4), dpi=300)
+    ax = fig.add_axes([9 / 85, 16 / 76, 56 / 85, 56 / 76])
     vmin = float(matrix.min())
     vmax = float(matrix.max())
     if np.isclose(vmin, vmax):
@@ -221,32 +223,33 @@ def plot_cross_matrix(
     ax.set_xticks(
         np.arange(size),
         labels=labels,
-        fontsize=12 if mmd_reference == "adjacent" else 15,
+        fontsize=6 if forecaster_mmd is not None else 8,
     )
-    ax.set_yticks(np.arange(size), labels=row_labels, fontsize=16)
-    ax.tick_params(axis="x", labelcolor="#2b6cb0")
+    ax.set_yticks(np.arange(size), labels=row_labels, fontsize=8)
     if mmd_reference == "adjacent":
         xlabel = r"Forecaster state ($D$: adjacent MMD)"
     else:
         xlabel = "Forecaster state (D: MMD from F0)"
-    ax.set_xlabel(xlabel, fontsize=15, labelpad=18)
-    ax.set_ylabel("Surrogate state", fontsize=18, labelpad=18)
-    ax.tick_params(length=0, pad=8)
+    ax.set_xlabel(xlabel, fontsize=8, labelpad=5)
+    ax.set_ylabel("Surrogate state", fontsize=8, labelpad=4)
+    ax.tick_params(length=0, pad=3)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.5)
     ax.set_xticks(np.arange(-0.5, size, 1), minor=True)
     ax.set_yticks(np.arange(-0.5, size, 1), minor=True)
-    ax.grid(which="minor", color="white", linewidth=2.2)
+    ax.grid(which="minor", color="white", linewidth=0.6)
     ax.tick_params(which="minor", bottom=False, left=False)
     midpoint = (vmin + vmax) / 2.0
     for i in range(size):
         for j in range(size):
             color = "white" if matrix[i, j] >= midpoint else "#102a43"
             ax.text(j, i, f"{matrix[i, j]:.2f}", ha="center", va="center",
-                    fontsize=17 if size <= 6 else 14, color=color)
+                    fontsize=7 if size <= 6 else 6, color=color)
     for i in range(size):
         ax.add_patch(
             plt.Rectangle(
                 (i - 0.43, i - 0.43), 0.86, 0.86,
-                fill=False, edgecolor="#202020", linewidth=1.3, zorder=4,
+                fill=False, edgecolor="#202020", linewidth=0.6, zorder=4,
             )
         )
     for i in range(1, size):
@@ -255,19 +258,22 @@ def plot_cross_matrix(
         ax.annotate(
             "", xy=(i - 0.30, i - 1),
             xytext=(i - 1 + 0.30, i - 1),
-            arrowprops={"arrowstyle": "->", "color": "#2b6cb0", "lw": 1.4},
+            arrowprops={"arrowstyle": "->", "color": "#2b6cb0", "lw": 0.6,
+                        "mutation_scale": 5, "shrinkA": 0, "shrinkB": 0},
             zorder=5,
         )
         ax.annotate(
             "", xy=(i, i - 0.27), xytext=(i, i - 1 + 0.27),
-            arrowprops={"arrowstyle": "->", "color": "#202020", "lw": 1.4},
+            arrowprops={"arrowstyle": "->", "color": "#202020", "lw": 0.6,
+                        "mutation_scale": 5, "shrinkA": 0, "shrinkB": 0},
             zorder=5,
         )
-    colorbar = fig.colorbar(image, ax=ax, fraction=0.045, pad=0.08)
-    colorbar.set_label("Normalized dispatch cost", fontsize=14, labelpad=12)
-    colorbar.ax.tick_params(labelsize=11)
-    fig.subplots_adjust(left=0.15, right=0.86, top=0.84, bottom=0.22)
-    fig.savefig(output_path, bbox_inches="tight", facecolor="white")
+    colorbar_ax = fig.add_axes([68 / 85, 16 / 76, 2.5 / 85, 56 / 76])
+    colorbar = fig.colorbar(image, cax=colorbar_ax)
+    colorbar.set_label("Normalized dispatch cost", fontsize=8, labelpad=4)
+    colorbar.ax.tick_params(labelsize=7, width=0.5, length=2, pad=2)
+    colorbar.outline.set_linewidth(0.5)
+    fig.savefig(output_path, facecolor="white")
     plt.close(fig)
 
 
