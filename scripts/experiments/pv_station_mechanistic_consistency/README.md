@@ -124,3 +124,27 @@ training objective, test sample membership, or epsilon was tuned to improve rho.
 The protocol was corrected using validation audits before the final test rerun.
 Because the earlier test result had already been inspected, a fresh independent
 dataset is preferable for a confirmatory publication experiment.
+
+## Publication figure
+
+The SVG is formatted at 181.9 x 76.2 mm for a two-column paper. Times New Roman
+and STIX mathematical glyphs are stored as vector outlines for portable font
+appearance. Panel (a) retains the paired-bootstrap intervals; panel (b) has equal
+rank-axis scaling. Experimental settings belong in the caption rather than a
+large in-figure title. To regenerate the layout from the embedded numerical
+results without rerunning model evaluation:
+
+```bash
+python scripts/experiments/pv_station_mechanistic_consistency/station_consistency.py --replot-svg figures/pv_station_mechanistic_consistency/pv_station_mechanistic_consistency.svg
+```
+
+Suggested caption:
+
+Relative-capacity sensitivity of PV stations under forecast perturbations.
+(a) Station importance, independently normalized by the maximum importance of
+each method; error bars show 95% paired-bootstrap intervals (2,000 resamples).
+(b) Agreement between station rankings (rank 1 denotes the highest importance).
+Results use 205 test samples and positive/negative perturbations of 5% of station
+capacity on common feasible daytime scenario-time entries (mean coverage 58.4%).
+The comparison evaluates sensitivity under this controlled perturbation protocol
+and does not isolate the effect of network location.

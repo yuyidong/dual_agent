@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'src'))
@@ -144,33 +145,54 @@ def plot_results(scores, names, epsilon, samples, output, rho, provenance):
     normalized = np.divide(scores, maxima, out=np.zeros_like(scores), where=maxima > 1e-12)
     ranks = np.array([station_ranks(v) for v in scores])
     order = np.argsort(-scores[0], kind='stable')
-    plt.rcParams.update({'font.family':'serif', 'font.serif':['Times New Roman','DejaVu Serif'], 'svg.fonttype':'none', 'font.size':11})
-    fig, axes = plt.subplots(1,2,figsize=(10,4.3), gridspec_kw={'width_ratios':[1.3,1]}, layout='constrained')
+    plt.rcParams.update({
+        'font.family':'serif', 'font.serif':['Times New Roman','DejaVu Serif'],
+        'mathtext.fontset':'stix', 'svg.fonttype':'path', 'font.size':9,
+        'axes.labelsize':10, 'xtick.labelsize':9, 'ytick.labelsize':9,
+        'axes.linewidth':.7, 'axes.labelpad':5, 'hatch.linewidth':.55,
+        'xtick.direction':'out', 'ytick.direction':'out',
+        'xtick.major.size':3, 'ytick.major.size':3,
+        'xtick.major.width':.65, 'ytick.major.width':.65,
+        'text.color':'#202020', 'axes.labelcolor':'#202020',
+    })
+    # Double-column width; outlined glyphs preserve the font when embedding SVG.
+    fig, axes = plt.subplots(1,2,figsize=(7.16,3.0), gridspec_kw={'width_ratios':[1.28,1]})
+    fig.subplots_adjust(left=.083,right=.985,bottom=.18,top=.86,wspace=.32)
+    display_names = [name.replace('pv_','PV ') for name in names]
     x = np.arange(len(names))
-    axes[0].bar(x-.19, normalized[0,order], .38, color='#376d8b', label='Mechanistic OPF')
-    axes[0].bar(x+.19, normalized[1,order], .38, color='#d69b43', hatch='//', label='Jointly trained surrogate')
+    width = .34
+    axes[0].bar(x-width/2, normalized[0,order], width, color='#376d8b', edgecolor='#244b60', linewidth=.5, label='Mechanistic OPF', zorder=2)
+    axes[0].bar(x+width/2, normalized[1,order], width, color='#dfa34b', edgecolor='#624820', linewidth=.5, hatch='///', label='Jointly trained surrogate', zorder=2)
     if 'bootstrap' in provenance:
         bounds = np.asarray(provenance['bootstrap']['normalized_ci95'])
-        for method, offset in enumerate((-.19,.19)):
+        for method, offset in enumerate((-width/2,width/2)):
             low, high = bounds[:,method,order]
-            axes[0].vlines(x+offset,low,high,color='#333333',lw=1)
-            axes[0].hlines(low,x+offset-.035,x+offset+.035,color='#333333',lw=1)
-            axes[0].hlines(high,x+offset-.035,x+offset+.035,color='#333333',lw=1)
-    axes[0].set(xticks=x, xticklabels=np.array(names)[order], ylim=(0,1.18), ylabel='Normalized importance', xlabel='PV station', title='(a) Station importance')
-    axes[0].legend(frameon=False, fontsize=9)
-    axes[1].plot([.6,len(names)+.4],[.6,len(names)+.4], '--', color='gray', lw=1)
-    axes[1].scatter(ranks[0],ranks[1],color='#376d8b',s=45,zorder=3)
-    for k,name in enumerate(names):
-        axes[1].annotate(name,(ranks[0,k],ranks[1,k]),xytext=(6,6),textcoords='offset points',fontsize=9)
-    axes[1].set(xlim=(.5,len(names)+.6),ylim=(.5,len(names)+.6),xticks=np.arange(1,len(names)+1),yticks=np.arange(1,len(names)+1),xlabel='Rank: mechanistic OPF',ylabel='Rank: jointly trained surrogate',title='(b) Ranking agreement')
-    agreement = f'Spearman $\\rho$ = {rho:.3f}' if rho is not None else 'No distinct ranking (ties)'
-    axes[1].text(.04,.96,agreement,transform=axes[1].transAxes,va='top')
-    for ax in axes:
+            axes[0].vlines(x+offset,low,high,color='#252525',lw=.7,zorder=4)
+            axes[0].hlines(low,x+offset-.04,x+offset+.04,color='#252525',lw=.7,zorder=4)
+            axes[0].hlines(high,x+offset-.04,x+offset+.04,color='#252525',lw=.7,zorder=4)
+    axes[0].set(xticks=x, xticklabels=np.array(display_names)[order], ylim=(0,1.10),
+                yticks=np.arange(0,1.01,.2), ylabel='Normalized importance', xlabel='PV station')
+    axes[0].set_xlim(-.6,len(names)-.4)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.51,1.015),ncol=2,
+               frameon=False,fontsize=9,handlelength=1.7,handletextpad=.6,columnspacing=2.0)
+    axes[1].plot([.6,len(names)+.4],[.6,len(names)+.4],color='#929292',lw=.75,dashes=(3,3),zorder=1)
+    axes[1].scatter(ranks[0],ranks[1],color='#376d8b',edgecolor='white',linewidth=.6,s=32,zorder=3)
+    for k,name in enumerate(display_names):
+        right_edge = ranks[0,k] >= len(names)-.25
+        axes[1].annotate(name,(ranks[0,k],ranks[1,k]),xytext=(-5,7) if right_edge else (5,6),
+                         ha='right' if right_edge else 'left',textcoords='offset points',fontsize=8.5)
+    axes[1].set(xlim=(.6,len(names)+.4),ylim=(.6,len(names)+.4),
+                xticks=np.arange(1,len(names)+1),yticks=np.arange(1,len(names)+1),
+                xlabel='Rank (mechanistic OPF)',ylabel='Rank (jointly trained surrogate)')
+    axes[1].set_aspect('equal',adjustable='box')
+    agreement = f'Spearman $\\rho = {rho:.2f}$' if rho is not None else 'No distinct ranking (ties)'
+    axes[1].text(.04,.96,agreement,transform=axes[1].transAxes,va='top',fontsize=9)
+    for panel,ax in zip(('(a)','(b)'),axes):
         ax.spines[['top','right']].set_visible(False)
-        ax.grid(axis='y',alpha=.18)
+        ax.grid(axis='y',color='#e4e4e4',lw=.45)
         ax.set_axisbelow(True)
-    split = provenance.get('split','test')
-    fig.suptitle(f'PV station importance under forecast perturbations\n$\\epsilon$ = {epsilon:.0%}; {samples} {split} samples', fontsize=14)
+        ax.text(0,1.045,panel,transform=ax.transAxes,fontsize=11,fontweight='bold',va='bottom')
     output.mkdir(parents=True,exist_ok=True)
     result = output/'pv_station_mechanistic_consistency.svg'
     provenance.update(importance=scores.tolist(), normalized=normalized.tolist(), ranks=ranks.tolist(), spearman=rho)
@@ -189,7 +211,19 @@ def main():
     parser.add_argument('--split',choices=('validation','test'),default='test')
     parser.add_argument('--perturbation',choices=('relative-capacity','equal-power'),default='relative-capacity')
     parser.add_argument('--output-dir',default='figures/pv_station_mechanistic_consistency')
+    parser.add_argument('--replot-svg',type=Path,help='Redraw stored SVG metadata without model evaluation')
     args = parser.parse_args()
+    if args.replot_svg is not None:
+        root = ET.parse(args.replot_svg).getroot()
+        description = root.find('.//{http://purl.org/dc/elements/1.1/}description')
+        if description is None or not description.text:
+            parser.error('The SVG contains no experiment metadata')
+        saved = json.loads(description.text)
+        result,_,_ = plot_results(np.asarray(saved['importance']),saved['stations'],
+                                 saved['epsilon'],saved['samples'],Path(args.output_dir),
+                                 saved['spearman'],saved)
+        print(f'Redrawn without evaluation: {result.resolve()}')
+        return
     if not 0 < args.epsilon < 1 or args.samples < 0:
         parser.error('Require 0 < epsilon < 1 and samples >= 0')
     torch.set_num_threads(1)
