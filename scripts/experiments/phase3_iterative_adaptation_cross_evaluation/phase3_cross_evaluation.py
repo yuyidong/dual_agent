@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import json
-import time
 from pathlib import Path
 from typing import Any
 
@@ -159,49 +156,6 @@ def evaluate_forecaster_output_mmd(
                      for index in range(1, len(outputs))]
 
 
-def save_matrix_csv(
-    path: Path,
-    raw_cost: np.ndarray,
-    normalized_cost: np.ndarray,
-    pair_metrics: dict[tuple[int, int], dict[str, float]],
-) -> None:
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(
-            [
-                "surrogate_state",
-                "forecast_state",
-                "operating_cost",
-                "normalized_operating_cost",
-                "energy_cost",
-                "curtailment_cost",
-                "degradation",
-                "network_violation",
-                "voltage_violation",
-                "line_flow_violation",
-                "terminal_soc_deviation",
-            ]
-        )
-        for i in range(raw_cost.shape[0]):
-            for j in range(raw_cost.shape[1]):
-                metrics = pair_metrics[(i, j)]
-                writer.writerow(
-                    [
-                        f"S{i}",
-                        f"F{j}",
-                        f"{raw_cost[i, j]:.10f}",
-                        f"{normalized_cost[i, j]:.10f}",
-                        f"{metrics['energy_cost']:.10f}",
-                        f"{metrics['curtailment_cost']:.10f}",
-                        f"{metrics['degradation']:.10f}",
-                        f"{metrics['network_violation']:.10f}",
-                        f"{metrics['voltage_violation']:.10f}",
-                        f"{metrics['line_flow_violation']:.10f}",
-                        f"{metrics['terminal_soc_deviation']:.10f}",
-                    ]
-                )
-
-
 def plot_cross_matrix(
     matrix: np.ndarray,
     output_path: Path,
@@ -287,7 +241,10 @@ def main() -> None:
         default="checkpoints/phase3_states",
         help="Directory containing forecaster_XX.pt and surrogate_XX.pt from train_joint.py.",
     )
-    parser.add_argument("--output-dir", default="figures")
+    parser.add_argument(
+        "--output-dir",
+        default="figures/phase3_iterative_adaptation_cross_evaluation",
+    )
     parser.add_argument("--train-fraction", type=float, default=None)
     parser.add_argument("--validation-fraction", type=float, default=None)
     parser.add_argument("--test-fraction", type=float, default=None)
@@ -295,7 +252,6 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
 
-    started = time.time()
     config = load_config(args.config)
     rounds = args.rounds or config.training.phase3_rounds
     if rounds < 1:
@@ -397,55 +353,18 @@ def main() -> None:
     normalized_cost = raw_cost / baseline_cost
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    matrix_path = output_dir / "phase3_cross_evaluation_matrix.png"
     svg_path = output_dir / "phase3_cross_evaluation_matrix.svg"
-    csv_path = output_dir / "phase3_cross_evaluation_matrix.csv"
-    json_path = output_dir / "phase3_cross_evaluation_summary.json"
-    npz_path = output_dir / "phase3_cross_evaluation_matrix.npz"
-    plot_cross_matrix(normalized_cost, matrix_path, forecaster_mmd, mmd_reference="adjacent")
     plot_cross_matrix(normalized_cost, svg_path, forecaster_mmd, mmd_reference="adjacent")
-    save_matrix_csv(csv_path, raw_cost, normalized_cost, pair_metrics)
 
-    diagonal = np.diag(normalized_cost)
     fixed_s0_change = normalized_cost[0, -1] - normalized_cost[0, 0]
     matched_change = normalized_cost[-1, -1] - normalized_cost[0, 0]
-    summary = {
-        "experiment": "phase3_cross_evaluation_iterative_adaptation",
-        "config": str(Path(args.config)), "data": str(Path(args.data)),
-        "phase3_checkpoint_dir": str(checkpoint_dir),
-        "state_source": "saved_phase3_stage_checkpoints",
-        "device": str(device), "seed": seed,
-        "train_fraction": train_fraction,
-        "validation_fraction": validation_fraction,
-        "test_fraction": test_fraction,
-        "rounds": rounds,
-        "state_labels": {
-            "forecast": [f"F{i}" for i in range(rounds + 1)],
-            "surrogate": [f"S{i}" for i in range(rounds + 1)],
-        },
-        "definition": "E[i,j] is the test-set operating cost of surrogate S_i with forecaster F_j; all normalized values divide by E[0,0].",
-        "baseline_operating_cost": baseline_cost,
-        "raw_operating_cost": raw_cost.tolist(),
-        "normalized_operating_cost": normalized_cost.tolist(),
-        "diagonal_normalized_cost": diagonal.tolist(),
-        "forecaster_output_mmd_adjacent": forecaster_mmd,
-        "fixed_S0_relative_change_at_last_forecaster": float(fixed_s0_change),
-        "matched_pair_relative_change_from_initial": float(matched_change),
-        "elapsed_seconds": time.time() - started,
-        "outputs": {
-            "png": str(matrix_path), "svg": str(svg_path),
-            "csv": str(csv_path), "npz": str(npz_path),
-        },
-    }
-    np.savez(npz_path, raw_operating_cost=raw_cost, normalized_operating_cost=normalized_cost)
-    json_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print("normalized matrix:")
     for row in normalized_cost:
         print(" ".join(f"{value:.4f}" for value in row))
     print(f"baseline_operating_cost={baseline_cost:.6f}")
     print(f"fixed_S0_last_relative_change={fixed_s0_change:+.4%}")
     print(f"matched_last_relative_change={matched_change:+.4%}")
-    print(f"outputs={output_dir.resolve()}")
+    print(f"output={svg_path.resolve()}")
 
 
 if __name__ == "__main__":
